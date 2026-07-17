@@ -114,7 +114,7 @@ Each developer subagent prompt must be **fully self-contained** and include:
 
 Plus these instructions:
 - Implement exactly what the sub-task description says — no more, no less
-- **Do NOT hand-edit generated artifacts** — `schema/contract.schema.json` and `src/cit/rules/sos_results_rules.yml` are generated, committed, and drift-checked; change their source and regenerate. Do not alter a `contracts/*.yml` declared interface (variables/dtypes/shapes/metadata) unless the sub-task description explicitly says to.
+- **Do NOT hand-edit generated artifacts** — `schema/contract.schema.json` and `src/cit/resources/rules/sos_results_rules.yml` are generated, committed, and drift-checked; change their source and regenerate. Do not alter a `resources/contracts/*.yml` declared interface (variables/dtypes/shapes/metadata) unless the sub-task description explicitly says to.
 - Run quality checks before committing: `uv run ruff check` and `uv run pytest`
 - Commit with a message that references the sub-task id
 - Close the sub-task in beads: `bd close <subtask-id> --reason="<what was done>"`
@@ -237,7 +237,7 @@ Sub-tasks landed:
 ## Rules
 
 - Never write or edit code directly from the main agent — all implementation goes through the `developer` subagent.
-- **Artifact integrity is non-negotiable**: generated committed artifacts (`schema/contract.schema.json`, `src/cit/rules/sos_results_rules.yml`) and the declared interfaces in `contracts/*.yml` must not be changed unless that change is the explicit purpose of the sub-task. If a subagent's close_reason mentions hand-editing a generated artifact or altering a contract interface that was not in scope, flag it to the user before continuing.
+- **Artifact integrity is non-negotiable**: generated committed artifacts (`schema/contract.schema.json`, `src/cit/resources/rules/sos_results_rules.yml`) and the declared interfaces in `resources/contracts/*.yml` must not be changed unless that change is the explicit purpose of the sub-task. If a subagent's close_reason mentions hand-editing a generated artifact or altering a contract interface that was not in scope, flag it to the user before continuing.
 - Never skip a sub-task or reorder them without asking the user.
 - Never push to `dev` — the feature branch is the only push target.
 - **Parallel launches**: always use `isolation: "worktree"` for sub-tasks running in the same wave — never launch two developer subagents concurrently on the same working tree.

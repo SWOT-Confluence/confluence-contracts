@@ -27,8 +27,8 @@ Key locations:
   - `parser.py` — `ContractParser` (result → draft contract)
   - `report.py` — `Finding` + `Report`
   - `__main__.py` — the `cit` CLI (`validate` | `parse`)
-- `src/cit/contracts/*.yml` — per-module contracts (package data, the interface source of truth)
-- `src/cit/rules/sos_results_rules.yml` — generated SoS rules artifact (package data)
+- `src/cit/resources/contracts/*.yml` — per-module contracts (package data, the interface source of truth)
+- `src/cit/resources/rules/sos_results_rules.yml` — generated SoS rules artifact (package data)
 - `tests/` — pytest suite
 - `pyproject.toml` — dependencies (managed with `uv`) and ruff config
 
@@ -125,7 +125,7 @@ New tests for new functionality should be added under `tests/` and must pass bef
 - **No speculative abstractions**: don't build for hypothetical future needs
 - **Docstrings and type annotations**: required on new public modules, functions, and classes (ruff enforces Google-style docstrings and annotations; line-length 100)
 - **Dependencies**: add runtime deps to `[project.dependencies]` and dev/test tooling to the `[dependency-groups] test` group in `pyproject.toml` — not inline installs
-- **Generated-artifact integrity**: do not hand-edit `schema/contract.schema.json` or `src/cit/rules/sos_results_rules.yml` — they are generated, committed, and drift-checked. Change the source (`models.py` / the SoS spreadsheet + `tools/rules_convert.py`) and regenerate, unless the task explicitly says otherwise.
+- **Generated-artifact integrity**: do not hand-edit `schema/contract.schema.json` or `src/cit/resources/rules/sos_results_rules.yml` — they are generated, committed, and drift-checked. Change the source (`models.py` / the SoS spreadsheet + `tools/rules_convert.py`) and regenerate, unless the task explicitly says otherwise.
 - **Contracts are the interface source of truth**: don't change a `contracts/*.yml` declared variable/dtype/shape/metadata unless the task calls for it.
 
 ## PR Format

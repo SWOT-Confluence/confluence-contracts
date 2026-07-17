@@ -1,6 +1,6 @@
 """SoS metadata-rules model and validator (the RULES side).
 
-Loads the committed rules artifact (``cit/rules/sos_results_rules.yml``, generated from
+Loads the committed rules artifact (``cit/resources/rules/sos_results_rules.yml``, generated from
 ``docs/sos-dataset/sos metadata.xlsx`` by a dev-time converter) and checks metadata
 attributes against the SoS specification.
 

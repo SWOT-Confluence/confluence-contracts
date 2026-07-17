@@ -32,8 +32,9 @@ src/cit/                       # the `cit` import package (flat: one module per 
   rules.py                     # SoS metadata-rules model + validator
   parser.py                    # ContractParser (result -> draft contract; inverse of validate)
   report.py                    # Finding + Report (statuses, banner, exit policy)
-  contracts/*.yml              # per-module contracts — the interface source of truth (package data)
-  rules/sos_results_rules.yml  # generated SoS rules artifact (package data)
+  resources/                   # all bundled package data (loaded via importlib.resources)
+    contracts/*.yml            # per-module contracts — the interface source of truth
+    rules/sos_results_rules.yml  # generated SoS rules artifact
 tests/                         # pytest suite
 pyproject.toml                 # dependencies (managed with uv) + ruff config
 # planned (later issues): schema/contract.schema.json, tools/rules_convert.py, .github/workflows/
@@ -122,9 +123,9 @@ The inner development loop — sub-task commit cadence, quality checks, commit-m
 - **Linting**: ruff (line-length 100), with Google-style docstrings and type annotations enforced — every public module/function/class needs a docstring. See `[tool.ruff.lint]` in `pyproject.toml`. Run `uv run ruff check` before finishing.
 - **Generated-artifact integrity**: the following are **generated, committed, and drift-checked in CI** — do not hand-edit them; change the source and regenerate:
   - `schema/contract.schema.json` ← derived from `src/cit/models.py` via `src/cit/schema.py` (`Contract.model_json_schema()`, serialized deterministically).
-  - `src/cit/rules/sos_results_rules.yml` ← generated from the SoS metadata spreadsheet (in the parent `confluence` repo, `docs/sos-dataset/`) by `tools/rules_convert.py` (openpyxl).
-- **Contracts are the interface source of truth**: `src/cit/contracts/*.yml` declare each module's produced variables/dtypes/shapes/metadata. Changing a declared interface changes what CIT enforces — only do so when a task explicitly calls for it. Prefer seeding new contracts with `cit parse`, then hand-reviewing.
-- **Package data & resources**: `contracts/` and `rules/` live *inside* `src/cit/` so they load via `importlib.resources` identically under editable and installed modes. Keep runtime-loaded data in-package.
+  - `src/cit/resources/rules/sos_results_rules.yml` ← generated from the SoS metadata spreadsheet (in the parent `confluence` repo, `docs/sos-dataset/`) by `tools/rules_convert.py` (openpyxl).
+- **Contracts are the interface source of truth**: `src/cit/resources/contracts/*.yml` declare each module's produced variables/dtypes/shapes/metadata. Changing a declared interface changes what CIT enforces — only do so when a task explicitly calls for it. Prefer seeding new contracts with `cit parse`, then hand-reviewing.
+- **Package data & resources**: all bundled data lives under the `src/cit/resources/` subpackage (`contracts/`, `rules/`), loaded via `importlib.resources.files("cit.resources")` — this resolves identically under editable and installed modes and avoids module-vs-directory name clashes (`rules.py`/`schema.py` next to a `rules/`/`schema/` dir). Keep runtime-loaded data in this subpackage, not scattered next to modules.
 - **Minimal changes**: implement only what a task requires; avoid speculative abstractions and unrelated refactors.
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:6cd5cc61 -->
