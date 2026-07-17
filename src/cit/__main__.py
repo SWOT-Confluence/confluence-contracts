@@ -19,14 +19,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    validate = subparsers.add_parser(
-        "validate", help="Check a result file against its contract."
-    )
+    validate = subparsers.add_parser("validate", help="Check a result file against its contract.")
     validate.set_defaults(func=_validate)
 
-    parse = subparsers.add_parser(
-        "parse", help="Generate a draft contract from a result file."
-    )
+    parse = subparsers.add_parser("parse", help="Generate a draft contract from a result file.")
     parse.set_defaults(func=_parse)
 
     return parser
