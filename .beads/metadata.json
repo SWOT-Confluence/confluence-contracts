@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "confluence_contracts",
+  "project_id": "97e563c7-9db5-4a20-bd41-8e0920e706ad"
+}
