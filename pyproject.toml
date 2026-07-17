@@ -29,6 +29,10 @@ dependencies = [
 Repository = "https://github.com/SWOT-Confluence/confluence-contracts"
 Issues = "https://github.com/SWOT-Confluence/confluence-contracts/issues"
 
+[tool.uv]
+# install the test tooling on a plain `uv sync` / `uv run` so ruff & pytest are always present
+default-groups = ["test"]
+
 [dependency-groups]
 test = [
     "openpyxl>=3.1.5",
@@ -65,7 +69,6 @@ ignore = [
   "D415",   # allow first line of doctstrings to end without punctuation
   "ANN002", # missing type on *args
   "ANN003", # missing type on **kwargs
-  "ANN101", # annotating self is non-standard and not required
   "B905",   # won't work on python <3.10
   "S101",   # allow assertions
 ]
@@ -77,6 +80,7 @@ ignore = [
   "ANN202", # missing return type annotation for private functions
   "ANN204", # missing return type annotation for special methods (e.g. __enter__, __exit__)
   "D102",   # missing docstring in public method
+  "D103",   # missing docstring in public function (test functions)
   "PLR2004",# magic values in test assertions are expected
 ]
 
