@@ -1,0 +1,24 @@
+# Contract for the MOMMA FLPE module.
+#
+# STUB — authored in P1-11 from a `cit parse` draft (a sample momma .nc + the SoS rules
+# artifact), then hand-reviewed. Shipped as package data (src/cit/resources/contracts/) so the
+# runtime loads it via importlib.resources consistently in both editable and installed modes.
+#
+# Shape (see cit.models.Contract):
+#
+#   version: <confluence_version>          # the functional Confluence version this targets
+#   source:                                # provenance — cit.models.Source
+#     repo: momma
+#     github_username: <owner>
+#     branch: main
+#     commit: <sha>
+#     image_tag: <tag>
+#   module:                                # cit.models.ModuleContract
+#     name: momma
+#     produces:                            # list[cit.models.Produces]
+#       - filepath: flpe/momma/{reach_id}_momma.nc
+#         dimensions: [nt]
+#         variables:                       # dict[str, cit.models.VariableContract]
+#           stage: { dtype: f8, shape: [nt], required: true, attrs: { ... } }
+#           # ... ~37 momma variables (width, slope, Q_constrained, zero_flow_stage, ...)
+#     consumes: []                         # list[cit.models.Consumes] — feeds the cross-check

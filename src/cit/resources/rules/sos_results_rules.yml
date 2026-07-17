@@ -1,0 +1,24 @@
+# SoS metadata-rules artifact.
+#
+# STUB — generated in P1-7 by tools/rules_convert.py from docs/sos-dataset/sos metadata.xlsx,
+# then committed and drift-checked in CI. Shipped as package data and loaded at runtime via
+# importlib.resources; the runtime never needs openpyxl.
+#
+# Shape (see cit.rules.RulesValidation):
+#
+#   global_attributes:                     # required global attribute names
+#     # - <attr_name>
+#   variable_attributes:                   # per-(module, variable) expected SoS attrs
+#     # momma:
+#     #   stage:
+#     #     long_name: ...
+#     #     comment: ...
+#     #     units: ...
+#     #     coverage_content_type: ...
+#     #     valid_min: ...
+#     #     valid_max: ...
+#   fill_values:                           # fill value by declared type
+#     # Float: -9.99999999999E11
+#     # Int:   -999
+#     # Int9:  -99999999
+#     # Char:  "x"
