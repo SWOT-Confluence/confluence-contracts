@@ -1,14 +1,26 @@
 """Command-line entry point for the cit contract tool."""
 
 import argparse
+import logging
+
+logger = logging.getLogger("cit")
 
 
 def _validate(args: argparse.Namespace) -> int:
-    raise SystemExit("cit validate: not implemented yet")
+    raise SystemExit("cit parse: not implemented yet")
 
 
 def _parse(args: argparse.Namespace) -> int:
     raise SystemExit("cit parse: not implemented yet")
+
+
+def _configure_logging(verbose: bool) -> None:
+    """Configure logging: INFO by default, DEBUG when --verbose is set."""
+    logging.basicConfig(
+        level=logging.DEBUG if verbose else logging.INFO,
+        format="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -17,6 +29,11 @@ def build_parser() -> argparse.ArgumentParser:
         prog="cit",
         description="Validate Confluence module result files against contracts.",
     )
+
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", help="Enable DEBUG logging (default: INFO)."
+    )
+
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     validate = subparsers.add_parser("validate", help="Check a result file against its contract.")
@@ -32,6 +49,7 @@ def main() -> None:
     """Entry point for the ``cit`` console script."""
     parser = build_parser()
     args = parser.parse_args()
+    _configure_logging(args.verbose)
     args.func(args)
 
 
