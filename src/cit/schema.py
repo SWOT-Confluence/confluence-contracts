@@ -41,3 +41,7 @@ def write_schema() -> None:
 def check_drift() -> bool:
     """True if the committed file matches the freshly generated output."""
     return SCHEMA_PATH.read_text() == render_schema()
+
+
+if __name__ == "__main__":
+    write_schema()

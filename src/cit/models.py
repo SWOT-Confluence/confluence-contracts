@@ -19,6 +19,7 @@ All models use ``extra="forbid"`` so an unexpected key is an error, not a silent
 
 # Standard imports
 from __future__ import annotations
+
 from typing import Literal
 
 # Third-party imports
@@ -36,24 +37,18 @@ CoverageContentType = Literal[
     "coordinate",
 ]
 
-DataType = Literal[
-    "f4",
-    "f8",
-    "i4",
-    "i8",
-    "S1"
-]
+DataType = Literal["f4", "f8", "i4", "i8", "S1"]
 
 
 class _Base(BaseModel):
     """Shared configuration data."""
 
     model_config = ConfigDict(
-        extra="forbid",             # no extra data may be passed in to the classes
-        frozen=True,                # make instances immutable
+        extra="forbid",  # no extra data may be passed in to the classes
+        frozen=True,  # make instances immutable
         str_strip_whitespace=True,  # strip whitespace on string fields
-        validate_default=True,      # validate default values
-        use_enum_values=True        # store enum's value rather than member
+        validate_default=True,  # validate default values
+        use_enum_values=True,  # store enum's value rather than member
     )
 
 
@@ -85,9 +80,7 @@ class VariableAttrs(_Base):
             and self.valid_max is not None
             and self.valid_min > self.valid_max
         ):
-            raise ValueError(
-                f"valid_min ({self.valid_min}) > valid_max ({self.valid_max})"
-            )
+            raise ValueError(f"valid_min ({self.valid_min}) > valid_max ({self.valid_max})")
         return self
 
 
@@ -129,6 +122,3 @@ class Contract(_Base):
     version: str  # confluence version contract targets
     source: Source
     module: ModuleContract
-
-
-

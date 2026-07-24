@@ -1,0 +1,257 @@
+{
+  "$defs": {
+    "Consumes": {
+      "additionalProperties": false,
+      "description": "One input a module reads (feeds the consumers/produces cross-check).",
+      "properties": {
+        "filepath": {
+          "title": "Filepath",
+          "type": "string"
+        },
+        "variables": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Variables",
+          "type": "array"
+        }
+      },
+      "required": [
+        "filepath"
+      ],
+      "title": "Consumes",
+      "type": "object"
+    },
+    "ModuleContract": {
+      "additionalProperties": false,
+      "description": "The modules contract that guides what it produces/consumes.",
+      "properties": {
+        "consumes": {
+          "items": {
+            "$ref": "#/$defs/Consumes"
+          },
+          "title": "Consumes",
+          "type": "array"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "produces": {
+          "items": {
+            "$ref": "#/$defs/Produces"
+          },
+          "title": "Produces",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "ModuleContract",
+      "type": "object"
+    },
+    "Produces": {
+      "additionalProperties": false,
+      "description": "One output file: path template, its dimensions, and its variables.",
+      "properties": {
+        "dimensions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Dimensions",
+          "type": "array"
+        },
+        "filepath": {
+          "title": "Filepath",
+          "type": "string"
+        },
+        "variables": {
+          "additionalProperties": {
+            "$ref": "#/$defs/VariableContract"
+          },
+          "title": "Variables",
+          "type": "object"
+        }
+      },
+      "required": [
+        "filepath",
+        "variables"
+      ],
+      "title": "Produces",
+      "type": "object"
+    },
+    "Source": {
+      "additionalProperties": false,
+      "description": "Provenance: Which functional version of the module this contract targets.",
+      "properties": {
+        "branch": {
+          "title": "Branch",
+          "type": "string"
+        },
+        "commit": {
+          "title": "Commit",
+          "type": "string"
+        },
+        "github_username": {
+          "title": "Github Username",
+          "type": "string"
+        },
+        "image_tag": {
+          "title": "Image Tag",
+          "type": "string"
+        },
+        "repo": {
+          "title": "Repo",
+          "type": "string"
+        }
+      },
+      "required": [
+        "repo",
+        "github_username",
+        "branch",
+        "commit",
+        "image_tag"
+      ],
+      "title": "Source",
+      "type": "object"
+    },
+    "VariableAttrs": {
+      "additionalProperties": false,
+      "description": "SoS metadata attributes for one variable (linted by cit.rules).",
+      "properties": {
+        "comment": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Comment"
+        },
+        "coverage_content_type": {
+          "enum": [
+            "image",
+            "thematicClassification",
+            "physicalMeasurement",
+            "auxiliaryInformation",
+            "qualityInformation",
+            "referenceInformation",
+            "modelResult",
+            "coordinate"
+          ],
+          "title": "Coverage Content Type",
+          "type": "string"
+        },
+        "long_name": {
+          "title": "Long Name",
+          "type": "string"
+        },
+        "units": {
+          "title": "Units",
+          "type": "string"
+        },
+        "valid_max": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Valid Max"
+        },
+        "valid_min": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Valid Min"
+        }
+      },
+      "required": [
+        "long_name",
+        "units",
+        "coverage_content_type"
+      ],
+      "title": "VariableAttrs",
+      "type": "object"
+    },
+    "VariableContract": {
+      "additionalProperties": false,
+      "description": "One variable's declarative structure: dtype, shape, requiredness, metadata.",
+      "properties": {
+        "attrs": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VariableAttrs"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "dtype": {
+          "enum": [
+            "f4",
+            "f8",
+            "i4",
+            "i8",
+            "S1"
+          ],
+          "title": "Dtype",
+          "type": "string"
+        },
+        "required": {
+          "default": true,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "shape": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Shape",
+          "type": "array"
+        }
+      },
+      "required": [
+        "dtype"
+      ],
+      "title": "VariableContract",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Top-level document: module, version, provenance.",
+  "properties": {
+    "module": {
+      "$ref": "#/$defs/ModuleContract"
+    },
+    "source": {
+      "$ref": "#/$defs/Source"
+    },
+    "version": {
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "version",
+    "source",
+    "module"
+  ],
+  "title": "Contract",
+  "type": "object"
+}
