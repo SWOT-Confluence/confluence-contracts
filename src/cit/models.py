@@ -4,7 +4,7 @@ These models are the in-memory representation of a ``contracts/<module>.yml`` fi
 the declared interface a Confluence module promises to produce. They are the source
 of truth from which the committed JSON Schema is derived (see :mod:`cit.schema`).
 
-Planned classes (P1-2), outer to inner:
+Classes:
 
 - ``Contract`` -- top-level document: module, confluence version, and source provenance.
 - ``ModuleContract`` -- the module's name plus what it ``produces`` and ``consumes``.
@@ -49,6 +49,7 @@ class _Base(BaseModel):
         str_strip_whitespace=True,  # strip whitespace on string fields
         validate_default=True,  # validate default values
         use_enum_values=True,  # store enum's value rather than member
+        coerce_numbers_to_str=True  # coerce version floats to string
     )
 
 
@@ -102,14 +103,14 @@ class Produces(_Base):
 
 
 class Consumes(_Base):
-    """One input a module reads (feeds the consumers/produces cross-check)."""
+    """One input a module reads (feeds the consumes/produces cross-check)."""
 
     filepath: str
     variables: list[str] = Field(default_factory=list)
 
 
 class ModuleContract(_Base):
-    """The modules contract that guides what it produces/consumes."""
+    """A module's contract that guides what it produces/consumes."""
 
     name: str
     produces: list[Produces] = Field(default_factory=list)

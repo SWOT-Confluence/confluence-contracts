@@ -34,7 +34,7 @@ def render_schema() -> str:
 
 def write_schema() -> None:
     """Write the schema file."""
-    SCHEMA_PATH.parent.mkdir(exist_ok=True)
+    SCHEMA_PATH.parent.mkdir(parents=True, exist_ok=True)
     SCHEMA_PATH.write_text(render_schema())
 
 

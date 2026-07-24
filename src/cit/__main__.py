@@ -3,17 +3,11 @@
 import argparse
 import logging
 
-from cit.schema import check_drift
-
 logger = logging.getLogger("cit")
 
 
 def _validate(args: argparse.Namespace) -> int:
-    if args.check:
-        if check_drift():
-            logger.info("Schema check passed, no drift detected.")
-        else:
-            logger.info("Schema check did NOT pass, drift detected.")
+    raise SystemExit("cit parse: not implemented yet")
 
 
 def _parse(args: argparse.Namespace) -> int:
@@ -42,7 +36,6 @@ def build_parser() -> argparse.ArgumentParser:
 
     validate = subparsers.add_parser("validate", help="Check a result file against its contract.")
     validate.set_defaults(func=_validate)
-    validate.add_argument("-c", "--check", action="store_true", help="Check for drift in JSON schema")
 
     parse = subparsers.add_parser("parse", help="Generate a draft contract from a result file.")
     parse.set_defaults(func=_parse)
