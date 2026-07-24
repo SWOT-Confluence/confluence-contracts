@@ -30,7 +30,9 @@ def build_parser() -> argparse.ArgumentParser:
         description="Validate Confluence module result files against contracts.",
     )
 
-    parser.add_argument("-v", "--verbose", action="store_true", help="Enable DEBUG logging (default: INFO).")
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", help="Enable DEBUG logging (default: INFO)."
+    )
 
     subparsers = parser.add_subparsers(dest="command", required=True)
 

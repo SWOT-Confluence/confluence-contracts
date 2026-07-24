@@ -15,6 +15,7 @@ from importlib.resources import files
 
 import pytest
 import yaml
+from conftest import build_valid_contract
 from pydantic import ValidationError
 
 from cit.models import Contract, VariableAttrs
@@ -94,3 +95,53 @@ def test_variable_attrs_bounds_validator_direct():
                 "coverage_content_type": "physicalMeasurement",
             }
         )
+
+
+def test_variable_without_attrs_is_valid(valid_contract):
+    """A variable that omits the optional ``attrs`` block validates with ``attrs is None``."""
+    del valid_contract["module"]["produces"][0]["variables"]["stage"]["attrs"]
+
+    contract = Contract.model_validate(valid_contract)
+
+    variable = contract.module.produces[0].variables["stage"]
+    assert variable.attrs is None
+
+
+def test_numeric_version_and_image_tag_coerced_from_yaml():
+    """Unquoted numeric ``version`` and ``image_tag`` from real YAML coerce to strings."""
+    text = """
+    version: 16.0
+    source:
+      repo: momma
+      github_username: octocat
+      branch: main
+      commit: abc
+      image_tag: 1.0
+    module:
+      name: momma
+      produces: []
+      consumes: []
+    """
+    data = yaml.safe_load(text)
+    # Confirm the YAML loader hands us Python floats, exactly as a real file would.
+    assert isinstance(data["version"], float)
+    assert isinstance(data["source"]["image_tag"], float)
+
+    contract = Contract.model_validate(data)
+
+    assert contract.version == "16.0"
+    assert isinstance(contract.version, str)
+    assert contract.source.image_tag == "1.0"
+    assert isinstance(contract.source.image_tag, str)
+
+
+def test_contract_round_trip_and_frozen():
+    """A contract survives a model_dump round-trip and rejects post-construction mutation."""
+    contract = Contract.model_validate(build_valid_contract())
+
+    dumped = contract.model_dump()
+    reloaded = Contract.model_validate(dumped)
+    assert reloaded == contract
+
+    with pytest.raises(ValidationError):
+        contract.version = "2.0"

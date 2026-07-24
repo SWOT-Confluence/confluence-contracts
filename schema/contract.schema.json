@@ -2,7 +2,7 @@
   "$defs": {
     "Consumes": {
       "additionalProperties": false,
-      "description": "One input a module reads (feeds the consumers/produces cross-check).",
+      "description": "One input a module reads (feeds the consumes/produces cross-check).",
       "properties": {
         "filepath": {
           "title": "Filepath",
@@ -24,7 +24,7 @@
     },
     "ModuleContract": {
       "additionalProperties": false,
-      "description": "The modules contract that guides what it produces/consumes.",
+      "description": "A module's contract that guides what it produces/consumes.",
       "properties": {
         "consumes": {
           "items": {

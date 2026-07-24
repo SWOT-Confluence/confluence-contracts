@@ -49,7 +49,7 @@ class _Base(BaseModel):
         str_strip_whitespace=True,  # strip whitespace on string fields
         validate_default=True,  # validate default values
         use_enum_values=True,  # store enum's value rather than member
-        coerce_numbers_to_str=True  # coerce version floats to string
+        coerce_numbers_to_str=True,  # coerce version floats to string
     )
 
 
