@@ -67,23 +67,31 @@ class NetCDF:
         """Close the handle when leaving the context."""
         self.close()
 
-    def iter_variables(self):
-        """Yield (qualified_name, numpy_dtype, dim_names, shape) for every variable.
-
-        Descends into nested groups, qualifying names as ``group/var``.
-
-        Yields:
-            Tuples of (qualified_name, numpy_dtype, dim_names, shape).
-        """
-        yield from self._walk(self.fp, prefix="")
-
-    def _walk(self, group, prefix):
-        """Recursively yield variable structure from a group and its subgroups."""
+    def _walk(self, group, prefix=""):
+        """Yield (qualified_name, variable) for every variable, descending into groups."""
         for name, var in group.variables.items():
-            yield f"{prefix}{name}", var.dtype, tuple(var.dimensions), tuple(var.shape)
+            yield f"{prefix}{name}", var
 
         for group_name, subgroup in group.groups.items():
             yield from self._walk(subgroup, prefix=f"{prefix}{group_name}/")
+
+    def iter_variables(self):
+        """Structure only: (qualified_name, numpy_dtype, dim_names, shape)."""
+        for name, var in self._walk(self.fp):
+            yield name, var.dtype, tuple(var.dimensions), tuple(var.shape)
+
+    @staticmethod
+    def _attrs(obj) -> dict:
+        """Read all netCDF attributes off a Dataset or Variable (incl. _FillValue)."""
+        return { name: obj.getncattr(name) for name in obj.ncattrs() }
+
+    def variable_attributes(self) -> dict[str, dict]:
+        """All attributes for every variable, keyed by qualified name."""
+        return { name: self._attrs(var) for name, var in self._walk(self.fp) }
+
+    def global_attributes(self) -> dict:
+        """Dataset-level (global) attributes — root only, not per-group."""
+        return self._attrs(self.fp)
 
 
 def numpy_to_token(dt: np.dtype) -> str:
