@@ -14,3 +14,7 @@ present; non-empty ``units``; ``coverage_content_type`` in the ISO codelist;
 ``valid_min <= valid_max``; ``_FillValue`` matching the fill value for its type. With
 ``strict=True`` violations FAIL; otherwise they WARN.
 """
+
+
+class Rule:
+    """One SoS metadata rule (stub — fields and checks land in P1-15)."""

@@ -13,3 +13,24 @@ Planned (P1-9):
   findings, and applies the exit policy: any ``FAIL`` -> exit 1; ``WARN``-only -> 0;
   ``--strict`` promotes rule ``WARN``s to ``FAIL``s; ``REPORT`` never changes the exit code.
 """
+
+from dataclasses import dataclass
+
+
+@dataclass
+class Finding:
+    """One check outcome emitted by a validator (stub — fields land in P1-9)."""
+
+    ...
+
+
+class Report:
+    """Aggregate findings and apply the run's exit policy (stub — behavior lands in P1-9)."""
+
+    def __init__(self, findings: list[Finding]) -> None:
+        """Store the findings to aggregate.
+
+        Args:
+            findings: The check outcomes collected across a validation run.
+        """
+        self._findings = findings

@@ -22,3 +22,35 @@
 #           stage: { dtype: f8, shape: [nt], required: true, attrs: { ... } }
 #           # ... ~37 momma variables (width, slope, Q_constrained, zero_flow_stage, ...)
 #     consumes: []                         # list[cit.models.Consumes] — feeds the cross-check
+
+version: "16.0"
+source:
+  repo: momma
+  github_username: nikki-t
+  branch: main
+  commit: 0123456789abcdef0123456789abcdef01234567
+  image_tag: momma:latest
+module:
+  name: momma
+  produces:
+    - filepath: flpe/momma/{reach_id}_momma.nc
+      dimensions: [nt]
+      variables:
+        stage:
+          dtype: f8
+          shape: [nt]
+          required: true
+          attrs:
+            long_name: water surface elevation
+            comment: MOMMA-estimated stage
+            units: m
+            valid_min: -1000.0
+            valid_max: 1000.0
+            coverage_content_type: physicalMeasurement
+        time_str:
+          dtype: str
+          shape: [nt]
+          required: false
+  consumes:
+    - filepath: sword/{continent}_sword.nc
+      variables: [reach_id]

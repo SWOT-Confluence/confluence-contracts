@@ -32,7 +32,6 @@ def test_minimal_valid_contract_validates(valid_contract):
     assert variable.required is True
 
 
-@pytest.mark.xfail(reason="momma.yml is still a stub — no contract body yet", strict=False)
 def test_bundled_momma_contract_validates():
     """The shipped momma.yml resource loads and validates via importlib.resources."""
     text = files("cit.resources").joinpath("contracts", "momma.yml").read_text()
