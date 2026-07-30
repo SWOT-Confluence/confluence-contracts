@@ -18,3 +18,78 @@ Planned (P1-4):
 
 Backed by :mod:`cit.netcdf` for the actual file walking.
 """
+
+import functools
+from abc import ABC
+from dataclasses import dataclass
+
+import numpy as np
+
+from netcdf import Netcdf, numpy_to_token
+
+
+@dataclass(frozen=True)
+class VarInfo:
+    dtype: str                      # contract token: "f8", "i4", "S1", ...
+    dims: tuple[str, ...]
+    shape: tuple[int, ...]
+
+
+class Result(ABC):
+    """"""
+
+    def __init__(self, filepath):
+        self._filepath = filepath
+
+    @property
+    def filepath(self) -> str:
+        return self._filepath
+
+    def close(self):
+        ...
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
+
+
+class NetcdfResult(Result):
+    """"""
+
+    def __init__(self):
+        self._nc = Netcdf(self._filepath)
+
+    def close(self):
+        self._nc.close()
+
+    @functools.cached_property
+    def global_attributes(self) -> dict:
+        return self._nc.global_attributes()
+
+    @functools.cached_property
+    def dimensions(self) -> dict:
+        return self._nc.dimensions()
+
+    @functools.cached_property
+    def variables(self) -> dict:
+        return {
+            name: VarInfo(numpy_to_token(dtype), dims, shape)
+            for name, dtype, dims, shape in self._nc.iter_variables()
+        }
+
+    @functools.cached_property
+    def variable_attributes(self) -> dict:
+        return self._nc.variable_attributes()
+
+    @functools.cached_property
+    def unit_fill_values(self) -> dict[str, set]:
+        """"""
+        fills: dict[str, set] = {}
+        for name, info in self.variables.items():
+            attrs = self.variable_attributes.get(name, {})
+            if "_FillValue" not in attrs:
+                continue
+            fills.setdefault(info.dtype, set()).add(attrs["_FillValue"])
+        return fills

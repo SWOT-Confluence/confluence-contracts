@@ -37,7 +37,7 @@ import numpy as np
 from cit.models import DataType
 
 
-class NetCDF:
+class Netcdf:
     """Class to handle NetCDF I/O operations and data retrieval."""
 
     # token -> numpy dtype (contract dtype string → what NetCDF/numpy uses)
@@ -102,6 +102,17 @@ class NetCDF:
     def global_attributes(self) -> dict:
         """Dataset-level (global) attributes — root only, not per-group."""
         return self._attrs(self.fp)
+
+    def dimensions(self) -> dict[str, int]:
+        """Root-level dimensions as ``{name: size}`` (e.g. momma → ``{"nt": 68}``).
+
+        Root-only for now; nested/group dimensions are handled when
+        :class:`cit.result.GroupedResult` lands.
+
+        Returns:
+            Mapping of each root dimension name to its size.
+        """
+        return {name: dim.size for name, dim in self.fp.dimensions.items()}
 
 
 def numpy_to_token(dt: np.dtype) -> str:
