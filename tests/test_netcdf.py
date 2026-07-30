@@ -1,19 +1,19 @@
 """Tests for the low-level NetCDF reader (cit.netcdf).
 
-These exercise :class:`cit.netcdf.NetCDF` and the module-level
+These exercise :class:`cit.netcdf.Netcdf` and the module-level
 :func:`cit.netcdf.numpy_to_token` against a synthetic file with a known structure,
 built in code with the ``netCDF4`` library and written to pytest's ``tmp_path``.
 
 The coverage spans four concerns:
 
-- structure: :meth:`NetCDF.iter_variables` reports dtype/dims/shape for every variable,
+- structure: :meth:`Netcdf.iter_variables` reports dtype/dims/shape for every variable,
   including scalars and slash-qualified names nested inside groups;
-- attributes: :meth:`NetCDF.variable_attributes` keys by qualified name and includes
-  ``_FillValue``, while :meth:`NetCDF.global_attributes` returns root-only attributes;
+- attributes: :meth:`Netcdf.variable_attributes` keys by qualified name and includes
+  ``_FillValue``, while :meth:`Netcdf.global_attributes` returns root-only attributes;
 - lifecycle: lazy opening, idempotent close, reopen-on-access, context-manager close,
   and the missing-file error path;
 - dtype mapping: the ``token <-> numpy dtype`` round-trip, map/vocabulary sync,
-  byte-order agnosticism, and vlen-string rejection.
+  byte-order agnosticism, and vlen-string mapping to the ``str`` token.
 """
 
 from typing import get_args
@@ -23,7 +23,7 @@ import numpy as np
 import pytest
 
 from cit.models import DataType
-from cit.netcdf import NetCDF, numpy_to_token
+from cit.netcdf import Netcdf, numpy_to_token
 
 
 @pytest.fixture
@@ -67,7 +67,7 @@ def sample_nc(tmp_path):
 
 def test_iter_variables_reports_structure(sample_nc):
     """iter_variables yields dtype, dims, and shape for every variable by qualified name."""
-    with NetCDF(sample_nc) as reader:
+    with Netcdf(sample_nc) as reader:
         collected = {
             name: (dtype, dims, shape) for name, dtype, dims, shape in reader.iter_variables()
         }
@@ -97,7 +97,7 @@ def test_iter_variables_reports_structure(sample_nc):
 
 def test_variable_attributes_keyed_by_qualified_name(sample_nc):
     """variable_attributes keys by qualified name, including nested group variables."""
-    with NetCDF(sample_nc) as reader:
+    with Netcdf(sample_nc) as reader:
         attrs = reader.variable_attributes()
 
     assert "gagecal/q" in attrs
@@ -105,7 +105,7 @@ def test_variable_attributes_keyed_by_qualified_name(sample_nc):
 
 def test_variable_attributes_include_fill_value_and_units(sample_nc):
     """A variable's attributes include long_name, units, and the _FillValue."""
-    with NetCDF(sample_nc) as reader:
+    with Netcdf(sample_nc) as reader:
         stage_attrs = reader.variable_attributes()["stage"]
 
     assert "long_name" in stage_attrs
@@ -117,7 +117,7 @@ def test_variable_attributes_include_fill_value_and_units(sample_nc):
 
 def test_global_attributes_contain_root_attrs(sample_nc):
     """global_attributes returns the root dataset attributes."""
-    with NetCDF(sample_nc) as reader:
+    with Netcdf(sample_nc) as reader:
         globals_ = reader.global_attributes()
 
     assert "Conventions" in globals_
@@ -127,7 +127,7 @@ def test_global_attributes_contain_root_attrs(sample_nc):
 
 def test_global_attributes_exclude_group_and_variable_attrs(sample_nc):
     """global_attributes is root-only: no group-level attrs, no variable names."""
-    with NetCDF(sample_nc) as reader:
+    with Netcdf(sample_nc) as reader:
         globals_ = reader.global_attributes()
 
     assert "group_note" not in globals_
@@ -136,7 +136,7 @@ def test_global_attributes_exclude_group_and_variable_attrs(sample_nc):
 
 def test_lazy_open_close_and_reopen(sample_nc):
     """The handle opens lazily on first .fp access, closes idempotently, and reopens."""
-    reader = NetCDF(sample_nc)
+    reader = Netcdf(sample_nc)
     assert reader._fp is None
 
     assert reader.fp.isopen() is True
@@ -151,7 +151,7 @@ def test_lazy_open_close_and_reopen(sample_nc):
 
 def test_context_manager_closes_on_exit(sample_nc):
     """The context manager closes the underlying dataset on block exit."""
-    with NetCDF(sample_nc) as reader:
+    with Netcdf(sample_nc) as reader:
         ds = reader.fp
         assert ds.isopen() is True
 
@@ -160,7 +160,7 @@ def test_context_manager_closes_on_exit(sample_nc):
 
 def test_missing_file_raises(tmp_path):
     """Accessing .fp for a nonexistent file raises an OSError."""
-    reader = NetCDF(tmp_path / "does_not_exist.nc")
+    reader = Netcdf(tmp_path / "does_not_exist.nc")
 
     with pytest.raises(OSError):
         _ = reader.fp
@@ -169,12 +169,12 @@ def test_missing_file_raises(tmp_path):
 def test_numpy_to_token_round_trip():
     """numpy_to_token inverts the TOKEN_TO_NUMPY map for every DataType token."""
     for token in get_args(DataType):
-        assert numpy_to_token(NetCDF.TOKEN_TO_NUMPY[token]) == token
+        assert numpy_to_token(Netcdf.TOKEN_TO_NUMPY[token]) == token
 
 
 def test_token_map_matches_model_vocabulary():
     """TOKEN_TO_NUMPY stays in sync with the DataType Literal vocabulary."""
-    assert set(NetCDF.TOKEN_TO_NUMPY) == set(get_args(DataType))
+    assert set(Netcdf.TOKEN_TO_NUMPY) == set(get_args(DataType))
 
 
 def test_numpy_to_token_is_byte_order_agnostic():
@@ -183,7 +183,6 @@ def test_numpy_to_token_is_byte_order_agnostic():
     assert numpy_to_token(np.dtype("<f8")) == "f8"
 
 
-def test_numpy_to_token_raises_on_vlen_string():
-    """The vlen string type (Python str) is rejected: it is not in the contract vocabulary."""
-    with pytest.raises(ValueError):
-        numpy_to_token(str)
+def test_numpy_to_token_maps_vlen_string():
+    """The vlen string type (Python str) maps to the 'str' contract token."""
+    assert numpy_to_token(str) == "str"

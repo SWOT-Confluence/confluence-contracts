@@ -6,7 +6,7 @@ both the reader (:mod:`cit.result`) and the contract parser (:mod:`cit.parser`).
 
 Implements (P1-3):
 
-- ``NetCDF`` -- a class wrapping one ``.nc`` file. Its ``fp`` property opens the dataset
+- ``Netcdf`` -- a class wrapping one ``.nc`` file. Its ``fp`` property opens the dataset
   lazily on first access (and reopens it if it was closed); ``close()`` is idempotent; the
   class doubles as a context manager that closes the handle on exit.
 - ``iter_variables() -> (qualified_name, numpy_dtype, dim_names, shape)`` -- walk every
@@ -16,14 +16,13 @@ Implements (P1-3):
   ``_FillValue``), keyed by qualified name.
 - ``global_attributes() -> dict`` -- read the dataset-level (global) attributes (root only).
 - ``numpy_to_token`` -- the module-level function mapping a NetCDF-reported numpy dtype to a
-  contract dtype token (e.g. ``f8``/``f4``/``i4``/``S1``), and ``NetCDF.TOKEN_TO_NUMPY`` --
+  contract dtype token (e.g. ``f8``/``f4``/``i4``/``S1``/``str``), and ``Netcdf.TOKEN_TO_NUMPY`` --
   the class-level map back the other way, together bridging a contract's ``dtype`` string and
   what NetCDF reports.
 
 The attribute helpers live here, not in :mod:`cit.result`, because this module is the single
 layer that touches the netCDF4 format; :mod:`cit.result` must not read netCDF4 directly and
-instead assembles its ``variable_attributes`` / ``global_attributes`` / ``unit_fill_values``
-from these helpers. They are kept separate from ``iter_variables`` so a structural-only run
+instead assembles its ``variable_attributes`` / ``global_attributes`` from these helpers. They are kept separate from ``iter_variables`` so a structural-only run
 does not pay to read metadata. Attribute consumers are ``RulesValidation`` (:mod:`cit.rules`)
 and ``check_non_fill`` (:mod:`cit.validation`).
 """
@@ -40,8 +39,11 @@ from cit.models import DataType
 class Netcdf:
     """Class to handle NetCDF I/O operations and data retrieval."""
 
-    # token -> numpy dtype (contract dtype string → what NetCDF/numpy uses)
+    # token -> numpy dtype (contract dtype string → what NetCDF/numpy uses). "str" (vlen
+    # NC_STRING) is reported by netCDF4 as the Python ``str`` type, so it is overridden below
+    # rather than left as ``np.dtype("str")`` (which is ``<U0`` and would break the round-trip).
     TOKEN_TO_NUMPY = {token: np.dtype(token) for token in get_args(DataType)}
+    TOKEN_TO_NUMPY["str"] = str
 
     def __init__(self, netcdf_file: str) -> None:
         """Store the file path; the dataset opens lazily on first access.
@@ -69,7 +71,7 @@ class Netcdf:
             self._fp.close()
         self._fp = None
 
-    def __enter__(self) -> "NetCDF":
+    def __enter__(self) -> "Netcdf":
         """Enter a context that guarantees a close() on exit."""
         return self
 
@@ -116,10 +118,18 @@ class Netcdf:
 
 
 def numpy_to_token(dt: np.dtype) -> str:
-    """Map a NetCDF-reported numpy dtype to a contract dtype token."""
+    """Map a NetCDF-reported dtype to a contract dtype token.
+
+    netCDF4 reports a vlen ``NC_STRING`` variable as the Python ``str`` type rather than an
+    ``np.dtype``; that maps to the ``"str"`` token. Every real ``np.dtype`` maps by kind and
+    itemsize, byte-order-agnostically (``>f8``/``<f8``/``=f8`` all → ``f8``).
+
+    Args:
+        dt: The dtype netCDF4 reports — an ``np.dtype``, or the ``str`` type for a vlen string.
+
+    Returns:
+        The contract dtype token (e.g. ``f8``, ``i4``, ``S1``, ``str``).
+    """
     if dt is str:  # netCDF4 reports the Python str type for vlen NC_STRING
-        raise ValueError(
-            "unsupported NetCDF dtype: NC_STRING/vlen string is not in the contract "
-            "dtype vocabulary (DataType = f4/f8/i4/i8/S1; SoS strings use fixed S1 char)"
-        )
+        return "str"
     return f"{dt.kind}{dt.itemsize}"  # byte-order-agnostic: '>f8', '<f8', '=f8' all -> 'f8'
