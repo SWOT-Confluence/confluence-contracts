@@ -65,6 +65,15 @@ def test_dtype_outside_literal_rejected(valid_contract):
         Contract.model_validate(valid_contract)
 
 
+def test_str_dtype_token_accepted(valid_contract):
+    """The vlen ``str`` dtype token validates (e.g. momma's ``time_str`` variable)."""
+    valid_contract["module"]["produces"][0]["variables"]["stage"]["dtype"] = "str"
+
+    contract = Contract.model_validate(valid_contract)
+
+    assert contract.module.produces[0].variables["stage"].dtype == "str"
+
+
 def test_missing_required_field_rejected(valid_contract):
     """Dropping a required top-level field (source) raises a validation error."""
     del valid_contract["source"]

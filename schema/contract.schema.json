@@ -208,7 +208,8 @@
             "f8",
             "i4",
             "i8",
-            "S1"
+            "S1",
+            "str"
           ],
           "title": "Dtype",
           "type": "string"

@@ -39,3 +39,8 @@ def test_committed_schema_matches_render():
 def test_dtype_literal_survives_into_schema():
     """The dtype Literal token 'f8' appears in the generated schema."""
     assert "f8" in json.dumps(build_schema())
+
+
+def test_str_dtype_token_in_schema():
+    """The vlen 'str' dtype token appears in the generated schema enum."""
+    assert '"str"' in json.dumps(build_schema())
