@@ -13,3 +13,19 @@ Planned (P1-9):
   findings, and applies the exit policy: any ``FAIL`` -> exit 1; ``WARN``-only -> 0;
   ``--strict`` promotes rule ``WARN``s to ``FAIL``s; ``REPORT`` never changes the exit code.
 """
+
+from dataclasses import dataclass
+
+
+@dataclass
+class Finding:
+    """"""
+    ...
+
+
+class Report:
+    """"""
+
+    def __init__(self, findings: list[Finding]) -> None:
+        """"""
+        self._findings = findings
