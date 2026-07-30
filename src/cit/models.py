@@ -37,7 +37,7 @@ CoverageContentType = Literal[
     "coordinate",
 ]
 
-DataType = Literal["f4", "f8", "i4", "i8", "S1"]
+DataType = Literal["f4", "f8", "i4", "i8", "S1", "str"]
 
 
 class _Base(BaseModel):
