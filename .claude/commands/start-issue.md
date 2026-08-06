@@ -4,7 +4,7 @@ description: >
   in parallel via developer subagents (one commit per sub-task), close the
   epic, and summarize for PR review. One call = one branch = one PR.
 argument-hint: "[epic-id]  (optional — defaults to next ready epic)"
-allowed-tools: Bash(bd *) Bash(git status*) Bash(git checkout*) Bash(git pull*) Bash(git branch*) Bash(git log*) Bash(git push*) Bash(git cherry-pick*) Bash(git worktree*) Bash(gh pr*) Bash(date *)
+allowed-tools: Bash(bd *) Bash(git status*) Bash(git checkout*) Bash(git pull*) Bash(git branch*) Bash(git log*) Bash(git push*) Bash(git cherry-pick*) Bash(git worktree*) Bash(gh pr*) Bash(gh issue*) Bash(date *)
 ---
 
 Work an entire epic end-to-end: branch → sub-tasks → summary. All code writing goes through the `developer` subagent — the main agent orchestrates only.
@@ -22,7 +22,14 @@ Otherwise run `bd ready` and select the top-priority unblocked epic (`--type=fea
 Run `bd show <epic-id>` and surface to the user:
 - Title, full description, scope boundary
 - Any plan file path referenced — read it if present
+- Any `GitHub: owner/repo#N` reference — read the issue and its comments if present:
+  `gh issue view <N> --json number,title,body,state,url,comments`
+  The comment thread is where scope gets refined after planning. If it has diverged from the beads
+  description, surface both and ask which is current **before** cutting a branch — discovering it
+  after five sub-tasks have landed is expensive.
 - Predecessor epic close context (`bd show <predecessor-id>`, collect `close_reason`)
+
+Record the issue number; it is needed for the PR body in step 10.
 
 Also collect the sub-tasks that belong to this epic:
 ```
@@ -62,6 +69,14 @@ Record the start timestamp in beads:
 ```
 bd update <epic-id> --notes "timing.started: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 ```
+
+If the epic has a linked GitHub issue, mark it in progress so collaborators see the work has started without having to read the beads queue:
+
+```
+gh issue comment <N> --body "Work started on branch \`<branch-name>\` (beads \`<epic-id>\`)."
+```
+
+One comment per epic run. Do not edit the issue body, and do not close it — the PR merge does that.
 
 ### 6. Build the execution plan
 
@@ -181,6 +196,18 @@ done
 
 Report to the user which branches were deleted and which were kept. If any `worktree-agent-*` branch is **kept** (unmerged), surface it explicitly — it means a sub-task's commit was never cherry-picked onto the feature branch, which is a real gap worth investigating before opening the PR. Do **not** force-delete (`-D`) these strays automatically; let the user decide.
 
+### 8a. Update the changelog
+
+Invoke the `changelog` skill and add or fold this epic's entry under `## [Unreleased]` in `CHANGELOG.md` — **one bullet for the whole epic**, not one per sub-task. If the epic already has a bullet there (a follow-up PR on the same epic), fold the new work into the existing line rather than appending a second.
+
+Skip only if the epic changed nothing user-visible: no change to what `cit` accepts or reports, the contract schema, a bundled `contracts/*.yml` interface, the exit-code policy, or the CLI surface. Say so explicitly in the summary if you skip.
+
+Commit it on the feature branch:
+```
+git add CHANGELOG.md
+git commit -m "Add changelog entry for <epic-id>: <epic title>"
+```
+
 ### 9. Record end time and close the epic
 
 Record the end timestamp **before** closing the epic (`bd update` does not work on closed issues):
@@ -200,7 +227,15 @@ bd close <epic-id> --reason="All sub-tasks complete on branch <branch-name>: <on
 
 ### 10. Push and open a PR
 
-The PR body must contain these four sections, written from the context accumulated during this session (epic description, sub-task close_reasons, commits, test results):
+The PR body must contain these four sections, written from the context accumulated during this session (epic description, sub-task close_reasons, commits, test results).
+
+If the epic has a linked GitHub issue, the body must **open** with a closing keyword on its own line so the merge closes the issue automatically:
+
+```
+Closes #<N>
+```
+
+Use `Closes` only when this PR fully delivers the issue. If it delivers part of it, write `Part of #<N>` instead — a premature `Closes` silently shuts an issue the team still considers open.
 
 **## Overview**
 One paragraph summarising what this PR delivers and why. End with an explicit review request: call out the 1–3 things the reviewer should focus on (e.g. the design decision made, the tricky integration point, the area most likely to have edge cases).
@@ -212,6 +247,9 @@ Bulleted list of the most important functional changes, grouped by area. For eac
 - Which quality checks were run (`ruff check`, `pytest`) and whether they passed
 - Any import-path or symbol fixes applied to tests (mechanical only — no logic changes)
 - Any `cit` commands run to verify (e.g. `cit --help`, `cit validate …`, `cit parse …`)
+- Whether the generated-artifact drift check passes, if `models.py` changed:
+  `uv run python -c "from cit.schema import check_drift; print(check_drift())"`
+- The `CHANGELOG.md` entry added (or an explicit note that the epic was not user-visible)
 
 **## Implementation**
 - Duration: <elapsed> minutes (<timing.started> → <timing.pr_opened>)
@@ -226,17 +264,23 @@ gh pr create --base dev --title "<epic title>" --body "..."
 After the PR is created, print a brief summary to the user:
 ```
 Epic complete: <epic-id> — <title>
+GitHub issue: #<N> — will close on merge  (or "none linked")
 Branch: <branch-name>
 PR: <pr-url>
 Duration: <elapsed> minutes  (<timing.started> → <timing.pr_opened>)
+Changelog: <the bullet added, or "skipped — no user-visible change">
 Sub-tasks landed:
   ✓ <subtask-id>: <title> — <close_reason>
   ✓ ...
 ```
 
+Do **not** close the GitHub issue here. The `Closes #N` in the PR body closes it on merge; closing it now would mark the work done while the PR is still under review.
+
 ## Rules
 
-- Never write or edit code directly from the main agent — all implementation goes through the `developer` subagent.
+- Never write or edit code directly from the main agent — all implementation goes through the `developer` subagent. The `CHANGELOG.md` entry in step 8a is the one exception: it is a record of the epic, written from context only the orchestrator holds.
+- **GitHub issues close on merge, never by hand.** Comment to signal progress; let `Closes #N` in the PR body do the closing. Use `Part of #N` when the PR delivers only part of an issue.
+- If GitHub is unreachable or `gh` is unauthenticated, continue — push the branch, report the PR command the user should run, and note which issue link was skipped. Do not block an otherwise-complete epic on it.
 - **Artifact integrity is non-negotiable**: generated committed artifacts (`schema/contract.schema.json`, `src/cit/resources/rules/sos_results_rules.yml`) and the declared interfaces in `resources/contracts/*.yml` must not be changed unless that change is the explicit purpose of the sub-task. If a subagent's close_reason mentions hand-editing a generated artifact or altering a contract interface that was not in scope, flag it to the user before continuing.
 - Never skip a sub-task or reorder them without asking the user.
 - Never push to `dev` — the feature branch is the only push target.

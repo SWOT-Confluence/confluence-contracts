@@ -100,19 +100,37 @@ Use subagents where appropriate — e.g. for parallel research, exploring the co
 
 **MANDATORY**: For any task that involves writing, modifying, or deleting code, you MUST invoke the `developer` subagent rather than implementing directly. Do not write or edit code as the main agent.
 
+## Skills
+
+Project skills live in `.claude/skills/` and are preloaded for the `developer` subagent:
+
+- **`confluence`** — the SWOT-Confluence domain (modules, the shared-mount file interop, reaches, SoS/PO.DAAC), how to author a `contracts/*.yml`, and which artifacts must never be hand-edited. Invoke it before writing or changing a contract, or when reasoning about what a module produces and who consumes it.
+- **`changelog`** — `CHANGELOG.md` conventions (one bullet per epic, keepachangelog 1.1.0) and the semver rules keyed to CIT's real breaking surfaces: the contract schema, the CLI, and any check that newly FAILs what previously passed.
+
 ## Slash Commands
 
-- `/make-plan <context-path>` — turn a filled-out context document into a reviewable development plan written to `docs/plans/`
-- `/plan-work <plan-path>` — turn an approved plan into beads epics + sub-tasks
+- `/make-plan <context-path | #issue>` — turn a filled-out context document **or a GitHub issue** into a reviewable development plan written to `docs/plans/`
+- `/plan-work <plan-path>` — turn an approved plan into beads epics + sub-tasks, linked to their GitHub issues
 - `/start-issue [epic-id]` — claim a ready epic, cut a feature branch off `dev`, and hand off sub-tasks to the `developer` subagent
 
-Suggest these proactively when the user reaches the corresponding step in the workflow (context written → `/make-plan`; plan approved → `/plan-work`; ready to implement → `/start-issue`).
+Suggest these proactively when the user reaches the corresponding step in the workflow (context or issue written → `/make-plan`; plan approved → `/plan-work`; ready to implement → `/start-issue`).
+
+## GitHub issues ↔ beads
+
+Both trackers are in use and they serve different readers. **GitHub issues** are the team-visible record — phase and epic-level work, often a parent issue with sub-issues, readable by collaborators who never run an agent. **beads** is the execution queue — sub-task granularity, dependency edges, `bd ready`.
+
+- One GitHub issue per **epic**; never one per sub-task.
+- Every beads epic description opens with a `GitHub: owner/repo#N` line; each linked issue carries one comment naming the bead id.
+- **GitHub is authoritative for scope; beads is authoritative for state.** If they disagree about what an epic includes, the issue wins and beads gets corrected — surface the divergence rather than resolving it silently.
+- Issues close when their PR merges (`Closes #N` in the PR body), never by hand.
+- Search GitHub before creating an issue; a duplicate epic issue splits the discussion thread.
 
 ## Git Branching (orchestration-level rules)
 
 - Each beads epic maps to exactly one feature branch off `dev` and one PR; sub-tasks are individual commits on that branch.
 - Never commit or push directly to `dev`.
-- After the human merges, close the epic issue: `bd close <epic-id> --reason "merged <PR URL>"`.
+- Every PR that changes something user-visible updates `CHANGELOG.md` under `[Unreleased]` — one bullet per epic (see the `changelog` skill).
+- After the human merges, close the epic issue: `bd close <epic-id> --reason "merged <PR URL>"`. The GitHub issue closes itself via the PR's `Closes #N`.
 - If the next epic depends on a previous one, pull `dev` before cutting the new branch.
 
 The inner development loop — sub-task commit cadence, quality checks, commit-message format, branch-cutting mechanics — is owned by the `developer` subagent. See [`.claude/agents/developer.md`](.claude/agents/developer.md). Main Claude should orchestrate (find/claim issues, invoke `/start-issue`, delegate to `developer`) and never edit code directly.
