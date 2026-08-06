@@ -19,7 +19,7 @@
 #       - filepath: flpe/momma/{reach_id}_momma.nc
 #         dimensions: [nt]
 #         variables:                       # dict[str, cit.models.VariableContract]
-#           stage: { dtype: f8, shape: [nt], required: true, attrs: { ... } }
+#           stage: { dtype: f8, dimensions: [nt], required: true, attrs: { ... } }
 #           # ... ~37 momma variables (width, slope, Q_constrained, zero_flow_stage, ...)
 #     consumes: []                         # list[cit.models.Consumes] — feeds the cross-check
 
@@ -38,7 +38,7 @@ module:
       variables:
         stage:
           dtype: f8
-          shape: [nt]
+          dimensions: [nt]
           required: true
           attrs:
             long_name: water surface elevation
@@ -49,7 +49,7 @@ module:
             coverage_content_type: physicalMeasurement
         time_str:
           dtype: str
-          shape: [nt]
+          dimensions: [nt]
           required: false
   consumes:
     - filepath: sword/{continent}_sword.nc

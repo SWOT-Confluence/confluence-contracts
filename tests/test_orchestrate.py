@@ -32,7 +32,7 @@ module:
       variables:
         stage:
           dtype: f8
-          shape: [nt]
+          dimensions: [nt]
           required: true
   consumes: []
 """

@@ -8,7 +8,7 @@ than authoring them by hand.
 Planned (P1-10):
 
 - ``ContractParser.parse(result, module, path_template, rules=None) -> Contract`` -- walk a
-  ``Result`` via :mod:`cit.netcdf`, emit each variable's ``dtype`` / ``shape`` / ``required``
+  ``Result`` via :mod:`cit.netcdf`, emit each variable's ``dtype`` / ``dimensions`` / ``required``
   and the ``filepath`` template, pre-fill the ``version`` / ``source`` scaffold, and -- when a
   rules artifact is supplied -- merge the SoS ``attrs`` per variable so the draft is complete
   enough to pass both validators. Serializes to draft YAML for ``cit parse``.
