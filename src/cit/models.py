@@ -10,7 +10,7 @@ Classes:
 - ``ModuleContract`` -- the module's name plus what it ``produces`` and ``consumes``.
 - ``Produces`` -- one output file: path template, dimensions, and variables.
 - ``Consumes`` -- inputs a module reads (feeds the consumes/produces cross-check).
-- ``VariableContract`` -- one variable's structure: dtype, shape, required.
+- ``VariableContract`` -- one variable's structure: dtype, dimensions, required.
 - ``VariableAttrs`` -- SoS metadata attributes linted by :mod:`cit.rules`.
 - ``Source`` -- provenance: repo, github_username, branch, commit, image_tag.
 
@@ -86,10 +86,10 @@ class VariableAttrs(_Base):
 
 
 class VariableContract(_Base):
-    """One variable's declarative structure: dtype, shape, requiredness, metadata."""
+    """One variable's declarative structure: dtype, dimensions, requiredness, metadata."""
 
     dtype: DataType
-    shape: list[str] = Field(default_factory=list)  # dimensions list
+    dimensions: list[str] = Field(default_factory=list)  # dimension names, in order
     required: bool = True
     attrs: VariableAttrs | None = None
 

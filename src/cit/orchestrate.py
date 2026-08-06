@@ -14,9 +14,11 @@ import functools
 from collections.abc import Iterable, Iterator
 
 from cit.data import find_contract_files, find_result_files, find_rules_files, load_yaml
-from cit.models import Contract
+from cit.models import Contract, Produces
 from cit.report import Finding, Report
 from cit.result import NetcdfResult
+from cit.rules import Rule
+from cit.validation import Validator, ValidatorContext
 
 
 class Orchestrate:
@@ -30,6 +32,7 @@ class Orchestrate:
                 ``flpe/momma/``).
         """
         self._data_mount = data_mount
+        self._validators = Validator.discover()
 
     @functools.cached_property
     def contracts(self) -> dict[str, Contract]:
@@ -41,12 +44,13 @@ class Orchestrate:
         return contracts
 
     @functools.cached_property
-    def rules(self) -> dict:
+    def rules(self) -> list[Rule]:
         """The SoS metadata rules -- stubbed (empty) until ``RulesValidation`` lands in P1-15."""
         rules_files = find_rules_files()  # noqa: F841  (stub: rules parsing arrives in P1-15)
-        return {}
+        rules = [Rule()]
+        return rules
 
-    def iter_results(self, module: str) -> Iterator[NetcdfResult]:
+    def iter_results(self, module: str) -> Iterator[tuple[Produces, NetcdfResult]]:
         """Lazily yield one :class:`NetcdfResult` per produced file for ``module``.
 
         Nothing is read until a result's property is accessed; the caller scopes each with ``with``
@@ -62,7 +66,7 @@ class Orchestrate:
         contract = self.contracts[module]
         for produces in contract.module.produces:
             for filepath in find_result_files(self._data_mount, produces.filepath):
-                yield NetcdfResult(str(filepath))
+                yield produces, NetcdfResult(str(filepath))
 
     def validate(self, module: str, strict: bool = False) -> list[Finding]:
         """Validate one module's produced results against its contract, one file at a time.
@@ -74,13 +78,12 @@ class Orchestrate:
         Returns:
             The findings for this module (empty until the validators land in P1-6/P1-15).
         """
-        contract = self.contracts[module]  # noqa: F841  (used by the P1-6 comparison, stubbed below)
         findings: list[Finding] = []
-        for result in self.iter_results(module):
+        for produces, result in self.iter_results(module):
             with result:
-                # findings += compare_contract_results(contract, result)   # P1-6
-                # findings += validate_rules(self.rules, result, strict)   # P1-15
-                pass
+                ctx = ValidatorContext(module, produces, self.rules, result)
+                for validator in self._validators:
+                    findings.extend(validator.validate(ctx))
         return findings
 
     def run(self, strict: bool = False, modules: Iterable[str] | None = None) -> Report:

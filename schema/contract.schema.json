@@ -189,7 +189,7 @@
     },
     "VariableContract": {
       "additionalProperties": false,
-      "description": "One variable's declarative structure: dtype, shape, requiredness, metadata.",
+      "description": "One variable's declarative structure: dtype, dimensions, requiredness, metadata.",
       "properties": {
         "attrs": {
           "anyOf": [
@@ -201,6 +201,13 @@
             }
           ],
           "default": null
+        },
+        "dimensions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Dimensions",
+          "type": "array"
         },
         "dtype": {
           "enum": [
@@ -218,13 +225,6 @@
           "default": true,
           "title": "Required",
           "type": "boolean"
-        },
-        "shape": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Shape",
-          "type": "array"
         }
       },
       "required": [

@@ -32,7 +32,7 @@ def build_valid_contract() -> dict:
                     "variables": {
                         "stage": {
                             "dtype": "f8",
-                            "shape": ["nt"],
+                            "dimensions": ["nt"],
                             "required": True,
                             "attrs": {
                                 "long_name": "water surface elevation",
