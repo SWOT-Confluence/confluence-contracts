@@ -13,6 +13,7 @@ from pathlib import Path
 import netCDF4 as nc
 import pytest
 
+from cit.models import Produces
 from cit.orchestrate import Orchestrate
 from cit.result import NetcdfResult
 
@@ -70,18 +71,27 @@ def test_contracts_loaded_and_keyed_by_module(orch):
 
 
 def test_iter_results_one_per_reach(orch):
-    """iter_results yields one NetcdfResult per produced file (the AC)."""
-    results = list(orch.iter_results("momma"))
+    """iter_results yields one (Produces, NetcdfResult) pair per produced file (the AC)."""
+    pairs = list(orch.iter_results("momma"))
 
-    assert len(results) == len(REACH_IDS)
-    assert all(isinstance(result, NetcdfResult) for result in results)
-    names = sorted(Path(result.filepath).name for result in results)
+    assert len(pairs) == len(REACH_IDS)
+    assert all(isinstance(produces, Produces) for produces, _ in pairs)
+    assert all(isinstance(result, NetcdfResult) for _, result in pairs)
+    names = sorted(Path(result.filepath).name for _, result in pairs)
     assert names == sorted(f"{reach_id}_momma.nc" for reach_id in REACH_IDS)
+
+
+def test_iter_results_pairs_each_result_with_its_contract_entry(orch):
+    """Each result is paired with the Produces entry whose template matched it."""
+    pairs = list(orch.iter_results("momma"))
+    produces = orch.contracts["momma"].module.produces[0]
+
+    assert all(entry is produces for entry, _ in pairs)
 
 
 def test_iter_results_is_lazy(orch):
     """Streaming opens nothing until a result is read; each closes independently."""
-    results = list(orch.iter_results("momma"))
+    results = [result for _, result in orch.iter_results("momma")]
     assert all(result._nc._fp is None for result in results)  # constructed, none opened
 
     with results[0] as result:

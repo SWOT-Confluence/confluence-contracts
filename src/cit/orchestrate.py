@@ -18,7 +18,7 @@ from cit.models import Contract, Produces
 from cit.report import Finding, Report
 from cit.result import NetcdfResult
 from cit.rules import Rule
-from cit.validation import ValidatorContext, Validator
+from cit.validation import Validator, ValidatorContext
 
 
 class Orchestrate:
@@ -47,7 +47,7 @@ class Orchestrate:
     def rules(self) -> list[Rule]:
         """The SoS metadata rules -- stubbed (empty) until ``RulesValidation`` lands in P1-15."""
         rules_files = find_rules_files()  # noqa: F841  (stub: rules parsing arrives in P1-15)
-        rules = [ Rule() ]
+        rules = [Rule()]
         return rules
 
     def iter_results(self, module: str) -> Iterator[tuple[Produces, NetcdfResult]]:
