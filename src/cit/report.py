@@ -15,13 +15,40 @@ Planned (P1-9):
 """
 
 from dataclasses import dataclass
+from enum import StrEnum
 
 
-@dataclass
-class Finding:
+class FindingType(StrEnum):
+    """"""
+    MISSING = "MISSING"
+    EXTRA = "EXTRA"
+    DIFFERENT = "DIFFERENT"
+    PASSED = "PASSED"
+
+
+class FindingStatus(StrEnum):
+    """"""
+    FAIL = "FAIL"
+    WARN = "WARN"
+    INFO = "INFO"
+
+
+_SEVERITY = {  # TODO evaluate if this is needed
+    FindingStatus.FAIL: 0,
+    FindingStatus.WARN: 1,
+    FindingStatus.INFO: 2,
+}
+# findings.sort(key=lambda f: _SEVERITY[f.status])
+
+@dataclass(frozen=True)
+class Finding():
     """One check outcome emitted by a validator (stub — fields land in P1-9)."""
-
-    ...
+    type: FindingType
+    status: FindingStatus
+    module_name: str
+    component: str
+    filepath: str
+    message: str = ""
 
 
 class Report:
