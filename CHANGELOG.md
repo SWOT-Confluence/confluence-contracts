@@ -28,6 +28,12 @@ and the PR descriptions.
   comparing a contract against a produced file in both directions — dimension and variable
   existence, dtype, and dimension ordering — and emitting typed `Finding`s
   ([#7](https://github.com/SWOT-Confluence/confluence-contracts/issues/7)).
+- **SoS metadata-rules artifact:** `tools/rules_convert.py` generates the bundled
+  `src/cit/resources/rules/sos_results_rules.yml` from `docs/sos-dataset/sos metadata.xlsx`;
+  the committed artifact holds 32 required global attributes, 14 module groups with per-variable
+  SoS metadata (long_name, units, valid_min/max, coverage_content_type), and the 4 canonical
+  fill-value types; drift-guarded by `tests/test_rules_artifact.py`
+  ([#8](https://github.com/SWOT-Confluence/confluence-contracts/issues/8)).
 
 ### Changed
 
