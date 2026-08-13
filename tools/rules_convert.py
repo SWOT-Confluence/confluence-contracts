@@ -141,9 +141,7 @@ def parse_variable_attributes(wb: openpyxl.Workbook) -> dict:
             continue  # skip group-header rows and ungrouped variables
 
         attrs: dict[str, object] = {
-            key: row[col]
-            for key, col in zip(_VA_ATTR_KEYS, _VA_ATTR_COLS)
-            if row[col] is not None
+            key: row[col] for key, col in zip(_VA_ATTR_KEYS, _VA_ATTR_COLS) if row[col] is not None
         }
 
         group_key = str(group)
@@ -192,7 +190,11 @@ def parse_fill_values(wb: openpyxl.Workbook) -> dict:
             if math.isclose(value, _FLOAT_FILL_FROM_XLSX, rel_tol=1e-5):
                 value = _FLOAT_FILL_CANONICAL
 
-        elif type_str.startswith(_INT_TYPE_PREFIX) and isinstance(value, float) and value.is_integer():
+        elif (
+            type_str.startswith(_INT_TYPE_PREFIX)
+            and isinstance(value, float)
+            and value.is_integer()
+        ):
             value = int(value)
 
         elif type_str == _CHAR_TYPE_NAME and isinstance(value, str):
@@ -218,10 +220,7 @@ def main() -> None:
         "--output",
         default=str(_DEFAULT_OUTPUT),
         metavar="PATH",
-        help=(
-            "Destination path for the generated YAML file "
-            f"(default: {_DEFAULT_OUTPUT})."
-        ),
+        help=(f"Destination path for the generated YAML file (default: {_DEFAULT_OUTPUT})."),
     )
 
     args = parser.parse_args()
