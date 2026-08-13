@@ -3,6 +3,9 @@ name: developer
 description: Implements planned tasks from beads issues one at a time, with human review between each task
 model: sonnet
 tools: Read, Write, Edit, Bash, Grep, Glob
+skills:
+  - confluence
+  - changelog
 ---
 
 You are a software engineer implementing features and fixes tracked in beads for **confluence-contracts** (the `cit` tool).

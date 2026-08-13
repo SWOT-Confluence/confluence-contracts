@@ -1,0 +1,20 @@
+# Keep large / generated artifacts out of Claude's context.
+.venv/
+dist/
+build/
+site/
+uv.lock
+.pytest_cache/
+.ruff_cache/
+**/__pycache__/
+
+# Result files are the ACTUAL side CIT reads — they are binary and often large.
+# Reference them by path and let cit/netcdf.py read them; never read one wholesale.
+*.nc
+*.nc4
+*.h5
+
+# Run mounts and scratch output.
+output/
+outputs/
+runs/
