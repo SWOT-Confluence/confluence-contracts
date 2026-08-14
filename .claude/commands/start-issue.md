@@ -247,7 +247,7 @@ Bulleted list of the most important functional changes, grouped by area. For eac
 - Which quality checks were run (`ruff check`, `pytest`) and whether they passed
 - Any import-path or symbol fixes applied to tests (mechanical only — no logic changes)
 - Any `cit` commands run to verify (e.g. `cit --help`, `cit validate …`, `cit parse …`)
-- Whether the generated-artifact drift check passes, if `models.py` changed:
+- Whether the generated-artifact drift check passes, if `contract.py` changed:
   `uv run python -c "from cit.schema import check_drift; print(check_drift())"`
 - The `CHANGELOG.md` entry added (or an explicit note that the epic was not user-visible)
 

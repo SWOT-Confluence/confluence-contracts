@@ -18,7 +18,7 @@ from pathlib import Path
 import netCDF4 as nc
 import pytest
 
-from cit.models import Produces
+from cit.contract import Produces
 from cit.report import FindingStatus, FindingType
 from cit.result import NetcdfResult
 from cit.validation import ContractValidator, Validator, ValidatorContext, _partition

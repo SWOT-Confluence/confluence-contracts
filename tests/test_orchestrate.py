@@ -13,7 +13,7 @@ from pathlib import Path
 import netCDF4 as nc
 import pytest
 
-from cit.models import Produces
+from cit.contract import Produces
 from cit.orchestrate import Orchestrate
 from cit.result import NetcdfResult
 

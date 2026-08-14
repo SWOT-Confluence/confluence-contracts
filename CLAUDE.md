@@ -25,7 +25,7 @@ science hooks are deferred to later phases.
 ```
 src/cit/                       # the `cit` import package (flat: one module per concern)
   __init__.py  __main__.py     # `cit` CLI — subcommands: validate | parse
-  models.py    schema.py       # EXPECTED contract models (Pydantic v2) + JSON Schema generation
+  contract.py  schema.py       # EXPECTED contract models (Pydantic v2) + JSON Schema generation
   netcdf.py    result.py       # low-level NetCDF reader + ACTUAL file read model
   data.py                      # I/O layer (the only component that touches disk)
   validation.py                # structural validator + report-only health checks + cross-check
@@ -140,7 +140,7 @@ The inner development loop — sub-task commit cadence, quality checks, commit-m
 - **Python ≥ 3.11**, dependencies managed with `uv`. Add **runtime** deps to `[project.dependencies]` and **dev/test** tooling to the `[dependency-groups] test` group in `pyproject.toml` — not via inline installs. (`openpyxl` is dev-only: the rules artifact is generated at dev time, never imported at runtime.)
 - **Linting**: ruff (line-length 100), with Google-style docstrings and type annotations enforced — every public module/function/class needs a docstring. See `[tool.ruff.lint]` in `pyproject.toml`. Run `uv run ruff check` before finishing.
 - **Generated-artifact integrity**: the following are **generated, committed, and drift-checked in CI** — do not hand-edit them; change the source and regenerate:
-  - `schema/contract.schema.json` ← derived from `src/cit/models.py` via `src/cit/schema.py` (`Contract.model_json_schema()`, serialized deterministically).
+  - `schema/contract.schema.json` ← derived from `src/cit/contract.py` via `src/cit/schema.py` (`Contract.model_json_schema()`, serialized deterministically).
   - `src/cit/resources/rules/sos_results_rules.yml` ← generated from the SoS metadata spreadsheet (in the parent `confluence` repo, `docs/sos-dataset/`) by `tools/rules_convert.py` (openpyxl).
 - **Contracts are the interface source of truth**: `src/cit/resources/contracts/*.yml` declare each module's produced variables/dtypes/shapes/metadata. Changing a declared interface changes what CIT enforces — only do so when a task explicitly calls for it. Prefer seeding new contracts with `cit parse`, then hand-reviewing.
 - **Package data & resources**: all bundled data lives under the `src/cit/resources/` subpackage (`contracts/`, `rules/`), loaded via `importlib.resources.files("cit.resources")` — this resolves identically under editable and installed modes and avoids module-vs-directory name clashes (`rules.py`/`schema.py` next to a `rules/`/`schema/` dir). Keep runtime-loaded data in this subpackage, not scattered next to modules.
