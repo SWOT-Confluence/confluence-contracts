@@ -15,6 +15,31 @@ present; non-empty ``units``; ``coverage_content_type`` in the ISO codelist;
 ``strict=True`` violations FAIL; otherwise they WARN.
 """
 
+# Third-party imports
+from pydantic import BaseModel, ConfigDict, Field
 
-class Rule:
-    """One SoS metadata rule (stub — fields and checks land in P1-15)."""
+
+_RULES_CONFIG = ConfigDict(extra="forbid", frozen=True, str_strip_whitespace=True)
+
+
+class MetadataRules(BaseModel):
+    """"""
+
+    model_config = _RULES_CONFIG
+    module_name: str
+    filepath: str
+    global_attributes: list[str] = Field(default_factory=list)
+    variable_attributes: dict[str, dict[str, MetadataRule]] = Field(default_factory=dict)
+    fill_values: dict[str, float | int | str] = Field(default_factory=dict)
+
+
+class MetadataRule(BaseModel):
+    """"""
+
+    model_config = _RULES_CONFIG
+    long_name: str | None = None
+    comment: str | None = None
+    units: str | None = None
+    valid_min: float | str | None = None
+    valid_max: float | str | None = None
+    coverage_content_type: str | None = None

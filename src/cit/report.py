@@ -80,6 +80,7 @@ class Finding:
     module_name: str
     component: str
     filepath: str
+    validation: str
     message: str = ""
 
 

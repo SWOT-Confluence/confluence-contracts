@@ -1,6 +1,6 @@
 """Structural validator plus the report-only health checks and registry cross-check.
 
-Compares a contract (EXPECTED, :mod:`cit.models`) against an actual file (ACTUAL,
+Compares a contract (EXPECTED, :mod:`cit.contract`) against an actual file (ACTUAL,
 :mod:`cit.result`) and emits ``Finding``s. This is the core interop guarantee: a changed
 module still produces the variables/dtypes/shapes downstream consumers expect.
 
@@ -28,10 +28,10 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-from cit.models import Produces, VariableContract
+from cit.contract import Produces, VariableContract
 from cit.report import Finding, FindingStatus, FindingType
 from cit.result import NetcdfResult, VarInfo
-from cit.rules import Rule
+from cit.rules import MetadataRules
 
 
 @dataclass
@@ -47,8 +47,9 @@ class ValidatorContext:
 
     name: str
     contract: Produces
-    rules: list[Rule]
+    rules: MetadataRules
     result: NetcdfResult
+    strict: bool
 
 
 class Validator(ABC):
@@ -146,6 +147,7 @@ class ContractValidator(Validator):
                     module_name=module_name,
                     component=name,
                     filepath=contract.filepath,
+                    validation="contract"
                 )
             )
 
@@ -157,6 +159,7 @@ class ContractValidator(Validator):
                     module_name=module_name,
                     component=name,
                     filepath=contract.filepath,
+                    validation="contract"
                 )
             )
 
@@ -168,6 +171,7 @@ class ContractValidator(Validator):
                     module_name=module_name,
                     component=name,
                     filepath=contract.filepath,
+                    validation="contract"
                 )
             )
 
@@ -203,6 +207,7 @@ class ContractValidator(Validator):
                     module_name=module_name,
                     component=name,
                     filepath=contract.filepath,
+                    validation="contract"
                 )
             )
 
@@ -214,6 +219,7 @@ class ContractValidator(Validator):
                     module_name=module_name,
                     component=name,
                     filepath=contract.filepath,
+                    validation="contract"
                 )
             )
 
@@ -266,6 +272,7 @@ class ContractValidator(Validator):
                     module_name=module_name,
                     component=name,
                     filepath=filepath,
+                    validation="contract",
                     message=message,
                 )
             )
@@ -280,6 +287,7 @@ class ContractValidator(Validator):
                     module_name=module_name,
                     component=name,
                     filepath=filepath,
+                    validation="contract",
                     message=message,
                 )
             )
@@ -293,6 +301,163 @@ class ContractValidator(Validator):
                     module_name=module_name,
                     component=name,
                     filepath=filepath,
+                    validation="contract"
+                )
+            )
+
+        return findings
+
+
+class RulesValidator(Validator):
+    """"""
+
+    def validate(self, context: ValidatorContext):
+        """"""
+        if not context.rules:
+            return []
+
+        module_name = context.name
+        filepath = context.rules.filepath
+        rules = context.rules
+        result = context.result
+        strict = context.strict
+
+        return [
+            *self._check_global_attributes(rules.global_attributes, result.global_attributes.keys(), module_name, filepath, strict),
+            *self._check_variables_attributes(rules.variable_attributes, result.variable_attributes, rules.fill_values, module_name, filepath, strict)
+        ]
+
+    def _check_global_attributes(self, rule, result, module_name, filepath, strict):
+        """"""
+        missing, extra, common = _partition(rule, result)
+        findings: list[Finding] = []
+
+        for name in missing:
+            findings.append(
+                Finding(
+                    type=FindingType.MISSING,
+                    status=FindingStatus.FAIL if strict else FindingStatus.WARN,
+                    module_name=module_name,
+                    component=name,
+                    filepath=filepath,
+                    validation="rule"
+                )
+            )
+
+        for name in extra:
+            findings.append(
+                Finding(
+                    type=FindingType.EXTRA,
+                    status=FindingStatus.WARN,
+                    module_name=module_name,
+                    component=name,
+                    filepath=filepath,
+                    validation="rule"
+                )
+            )
+
+        for name in common:
+            findings.append(
+                Finding(
+                    type=FindingType.PASSED,
+                    status=FindingStatus.INFO,
+                    module_name=module_name,
+                    component=name,
+                    filepath=filepath,
+                    validation="rule"
+                )
+            )
+
+        return findings
+
+    def _check_variables_attributes(self, rule, result, fill_values, module_name, filepath, strict):
+        """"""
+
+        rule_attributes = {
+            f"{group}/{variable}": metadata_rule.model_fields_set
+            for group, variables in rule.items()
+            for variable, metadata_rule in variables.items()
+        }
+
+        result_attributes = {
+            group: set(variables.keys())
+            for group, variables in result.items()
+        }
+
+
+        missing, extra, common = _partition(rule_attributes.keys(), result_attributes.keys())
+        findings: list[Finding] = []
+
+        for name in missing:
+            findings.append(
+                Finding(
+                    type=FindingType.MISSING,
+                    status=FindingStatus.FAIL if strict else FindingStatus.WARN,
+                    module_name=module_name,
+                    component=name,
+                    filepath=filepath,
+                    validation="rule"
+                )
+            )
+
+        for name in extra:
+            findings.append(
+                Finding(
+                    type=FindingType.EXTRA,
+                    status=FindingStatus.WARN,
+                    module_name=module_name,
+                    component=name,
+                    filepath=filepath,
+                    validation="rule"
+                )
+            )
+
+        for name in common:
+            variable_findings = self._check_variable_attributes(rule_attributes[name], result_attributes[name], name, fill_values, module_name, filepath, strict)
+            findings.extend(variable_findings)
+
+        return findings
+
+    def _check_variable_attributes(self, rule, result, var_name, fill_values, module_name, filepath, strict):
+        """"""
+        missing, extra, common = _partition(rule, result)
+        findings: list[Finding] = []
+
+        for name in missing:
+            findings.append(
+                Finding(
+                    type=FindingType.MISSING,
+                    status=FindingStatus.FAIL if strict else FindingStatus.WARN,
+                    module_name=module_name,
+                    component=f"{var_name}.{name}",
+                    filepath=filepath,
+                    validation="rule"
+                )
+            )
+
+        for name in extra:
+            findings.append(
+                Finding(
+                    type=FindingType.EXTRA,
+                    status=FindingStatus.WARN,
+                    module_name=module_name,
+                    component=f"{var_name}.{name}",
+                    filepath=filepath,
+                    validation="rule"
+                )
+            )
+
+        for name in common:
+            # Need to check fill values
+            # Need to check max < min when both are numbers
+            findings.append(
+                Finding(
+                    type=FindingType.PASSED,
+                    status=FindingStatus.INFO,
+                    module_name=module_name,
+                    component=f"{var_name}.{name}",
+                    filepath=filepath,
+                    validation="rule"
                 )
             )
 

@@ -1,0 +1,915 @@
+# Contract for the Output module's aggregated SoS results file.
+#
+# SEEDED from a real result file, then hand-reviewed:
+#   na_sword_v16_SOS_results_unconstrained_20230502T204408_20250502T204408_20251219T163700.nc
+#   (NA continent, 38,048 reaches / 1,683,122 nodes, 212 variables, 15 groups)
+#
+# Variable keys are group-qualified (`group/var`, `group/subgroup/var`) to match the keys
+# cit.netcdf.Netcdf._walk produces, so a flat mapping describes a grouped file.
+#
+# `dimensions` below lists ROOT dimensions only. cit.netcdf.Netcdf.dimensions() reads the
+# root table, so declaring a group-local dimension here would be reported MISSING. The
+# group-local ones still appear in per-variable `dimensions`, which are compared against
+# the variable's own dimension names:
+#   lakeflow: lakeflow_dates=689
+#   postdiagnostics: nchar=10
+#   postdiagnostics/basin: basin_num_algos=5
+#   postdiagnostics/reach: reach_num_algos=6
+#   sic4dvar: nb_pts=10
+#   validation: num_algos=14, nchar=100, num_reaches=38048
+#   NOTE: `validation` redeclares num_reaches, shadowing root at the same size.
+#
+# Only the reaches/ and nodes/ groups are `required`. Every module group is optional because
+# group presence tracks the run's modules_to_run, not data availability -- a partial run
+# legitimately omits whole groups.
+
+version: "16.0"   # file reports SWORD v16; its `history` says Confluence version 0.1.0
+source:
+  repo: output
+  github_username: SWOT-Confluence
+  branch: main
+  commit: 0000000000000000000000000000000000000000   # TODO: sha of the run that wrote this file
+  image_tag: output:latest                           # TODO: real image tag
+module:
+  name: output
+  produces:
+    - filepath: output/sos/{continent_id}_sword_v{number}_SOS_results.nc
+      dimensions: [num_reaches, num_nodes]
+      variables:
+        # --- reaches — 6 variables, required: true
+        reaches/observations:
+          dtype: str
+          dimensions: [num_reaches]
+          required: true
+        reaches/reach_id:
+          dtype: i8
+          dimensions: [num_reaches]
+          required: true
+        reaches/river_name:
+          dtype: str
+          dimensions: [num_reaches]
+          required: true
+        reaches/time:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: true
+        reaches/x:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: true
+        reaches/y:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: true
+        # --- nodes — 7 variables, required: true
+        nodes/node_id:
+          dtype: i8
+          dimensions: [num_nodes]
+          required: true
+        nodes/observations:
+          dtype: str
+          dimensions: [num_nodes]
+          required: true
+        nodes/reach_id:
+          dtype: i8
+          dimensions: [num_nodes]
+          required: true
+        nodes/river_name:
+          dtype: str
+          dimensions: [num_nodes]
+          required: true
+        nodes/time:
+          dtype: f8
+          dimensions: [num_nodes]
+          required: true
+        nodes/x:
+          dtype: f8
+          dimensions: [num_nodes]
+          required: true
+        nodes/y:
+          dtype: f8
+          dimensions: [num_nodes]
+          required: true
+        # --- hivdi — 2 variables, required: false
+        hivdi/A0:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        hivdi/Q:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        # --- metroman — 5 variables, required: false
+        metroman/A0hat:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        metroman/allq:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        metroman/nahat:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        metroman/q_u:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        metroman/x1hat:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        # --- moi/neobam — 5 variables, required: false
+        moi/neobam/a0:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        moi/neobam/n:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        moi/neobam/q:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        moi/neobam/qbar_basinScale:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        moi/neobam/qbar_reachScale:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        # --- moi/hivdi — 6 variables, required: false
+        moi/hivdi/Abar:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        moi/hivdi/alpha:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        moi/hivdi/beta:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        moi/hivdi/q:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        moi/hivdi/qbar_basinScale:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        moi/hivdi/qbar_reachScale:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        # --- moi/metroman — 6 variables, required: false
+        moi/metroman/Abar:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        moi/metroman/na:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        moi/metroman/q:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        moi/metroman/qbar_basinScale:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        moi/metroman/qbar_reachScale:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        moi/metroman/x1:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        # --- moi/momma — 6 variables, required: false
+        moi/momma/B:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        moi/momma/H:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        moi/momma/Save:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        moi/momma/q:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        moi/momma/qbar_basinScale:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        moi/momma/qbar_reachScale:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        # --- moi/sad — 5 variables, required: false
+        moi/sad/a0:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        moi/sad/n:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        moi/sad/q:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        moi/sad/qbar_basinScale:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        moi/sad/qbar_reachScale:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        # --- moi/sic4dvar — 5 variables, required: false
+        moi/sic4dvar/a0:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        moi/sic4dvar/n:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        moi/sic4dvar/q:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        moi/sic4dvar/qbar_basinScale:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        moi/sic4dvar/qbar_reachScale:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        # --- momma — 37 variables, required: false
+        momma/Froude_bkfl_diag_Smean:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        momma/Q:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        momma/Q_constrained:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        momma/Qgage:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        momma/Qgage_constrained_nb_seg1:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        momma/Qgage_constrained_nb_seg2:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        momma/Qgage_constrained_x_seg1:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        momma/Qgage_constrained_x_seg2:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        momma/Qmean_momma:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        "momma/Qmean_momma.constrained":
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        momma/Qmean_prior:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        momma/Y:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        momma/bankfull_stage:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        momma/depth_bkfl_diag_Wb_Smean:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        momma/depth_bkfl_solved_obs:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        momma/gage_constrained:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        momma/input_Qb_prior:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        momma/input_Qm_prior:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        momma/input_Yb_prior:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        momma/input_known_bkfl_stage:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        momma/input_known_ezf:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        momma/input_known_nb_seg1:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        momma/input_known_nb_seg2:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        momma/input_known_x_seg1:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        momma/input_known_x_seg2:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        momma/n:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        momma/n_bkfl_Qb_prior:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        momma/n_bkfl_slope:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        momma/seg:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        momma/slope:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        momma/stage:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        momma/v:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        momma/vel_bkfl_Qb_prior:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        momma/width:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        momma/width_bkfl_solved_obs:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        momma/width_stage_corr:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        momma/zero_flow_stage:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        # --- neobam/r — 2 variables, required: false
+        neobam/r/mean:
+          dtype: f8
+          dimensions: [num_nodes]
+          required: false
+        neobam/r/sd:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        # --- neobam/logn — 2 variables, required: false
+        neobam/logn/mean:
+          dtype: f8
+          dimensions: [num_nodes]
+          required: false
+        neobam/logn/sd:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        # --- neobam/logDb — 2 variables, required: false
+        neobam/logDb/mean:
+          dtype: f8
+          dimensions: [num_nodes]
+          required: false
+        neobam/logDb/sd:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        # --- neobam/logWb — 2 variables, required: false
+        neobam/logWb/mean:
+          dtype: f8
+          dimensions: [num_nodes]
+          required: false
+        neobam/logWb/sd:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        # --- neobam/q — 2 variables, required: false
+        neobam/q/q:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        neobam/q/q_sd:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        # --- offline — 16 variables, required: false
+        offline/bam_q_c:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        offline/bam_q_uc:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        offline/consensus_q_c:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        offline/consensus_q_uc:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        offline/d_x_area:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        offline/d_x_area_u:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        offline/hivdi_q_c:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        offline/hivdi_q_uc:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        offline/metro_q_c:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        offline/metro_q_uc:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        offline/momma_q_c:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        offline/momma_q_uc:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        offline/sads_q_c:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        offline/sads_q_uc:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        offline/sic4dvar_q_c:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        offline/sic4dvar_q_uc:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        # --- postdiagnostics/basin — 5 variables, required: false
+        postdiagnostics/basin/basin_algo_names:
+          dtype: S1
+          dimensions: [basin_num_algos, nchar]
+          required: false
+        postdiagnostics/basin/basin_num_algos:
+          dtype: i4
+          dimensions: [basin_num_algos]
+          required: false
+        postdiagnostics/basin/prepost_flags:
+          dtype: i4
+          dimensions: [num_reaches, basin_num_algos]
+          required: false
+        postdiagnostics/basin/realism_flags:
+          dtype: i4
+          dimensions: [num_reaches, basin_num_algos]
+          required: false
+        postdiagnostics/basin/stability_flags:
+          dtype: i4
+          dimensions: [num_reaches, basin_num_algos]
+          required: false
+        # --- postdiagnostics/reach — 4 variables, required: false
+        postdiagnostics/reach/reach_algo_names:
+          dtype: S1
+          dimensions: [reach_num_algos, nchar]
+          required: false
+        postdiagnostics/reach/reach_num_algos:
+          dtype: i4
+          dimensions: [reach_num_algos]
+          required: false
+        postdiagnostics/reach/realism_flags:
+          dtype: i4
+          dimensions: [num_reaches, reach_num_algos]
+          required: false
+        postdiagnostics/reach/stability_flags:
+          dtype: i4
+          dimensions: [num_reaches, reach_num_algos]
+          required: false
+        # --- prediagnostics/reach — 9 variables, required: false
+        prediagnostics/reach/d_x_area_flag:
+          dtype: i4
+          dimensions: [num_reaches]
+          required: false
+        prediagnostics/reach/dark_frac:
+          dtype: i4
+          dimensions: [num_reaches]
+          required: false
+        prediagnostics/reach/ice_clim_f:
+          dtype: i4
+          dimensions: [num_reaches]
+          required: false
+        prediagnostics/reach/low_slope_flag:
+          dtype: i4
+          dimensions: [num_reaches]
+          required: false
+        prediagnostics/reach/slope2_outliers:
+          dtype: i4
+          dimensions: [num_reaches]
+          required: false
+        prediagnostics/reach/slope_outliers:
+          dtype: i4
+          dimensions: [num_reaches]
+          required: false
+        prediagnostics/reach/width_outliers:
+          dtype: i4
+          dimensions: [num_reaches]
+          required: false
+        prediagnostics/reach/wse_outliers:
+          dtype: i4
+          dimensions: [num_reaches]
+          required: false
+        prediagnostics/reach/xovr_cal_q:
+          dtype: i4
+          dimensions: [num_reaches]
+          required: false
+        # --- prediagnostics/node — 9 variables, required: false
+        prediagnostics/node/d_x_area_flag:
+          dtype: i4
+          dimensions: [num_nodes]
+          required: false
+        prediagnostics/node/dark_frac:
+          dtype: i4
+          dimensions: [num_nodes]
+          required: false
+        prediagnostics/node/ice_clim_f:
+          dtype: i4
+          dimensions: [num_nodes]
+          required: false
+        prediagnostics/node/low_slope_flag:
+          dtype: i4
+          dimensions: [num_nodes]
+          required: false
+        prediagnostics/node/slope2_outliers:
+          dtype: i4
+          dimensions: [num_nodes]
+          required: false
+        prediagnostics/node/slope_outliers:
+          dtype: i4
+          dimensions: [num_nodes]
+          required: false
+        prediagnostics/node/width_outliers:
+          dtype: i4
+          dimensions: [num_nodes]
+          required: false
+        prediagnostics/node/wse_outliers:
+          dtype: i4
+          dimensions: [num_nodes]
+          required: false
+        prediagnostics/node/xovr_cal_q:
+          dtype: i4
+          dimensions: [num_nodes]
+          required: false
+        # --- sad — 4 variables, required: false
+        sad/A0:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        sad/Q_u:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        sad/Qa:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        sad/n:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        # --- sic4dvar — 6 variables, required: false
+        sic4dvar/A0:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        sic4dvar/Q_da:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        sic4dvar/Q_mm:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        sic4dvar/elevation:
+          dtype: f8
+          dimensions: [num_nodes, nb_pts]
+          required: false
+        sic4dvar/n:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        sic4dvar/width:
+          dtype: f8
+          dimensions: [num_nodes, nb_pts]
+          required: false
+        # --- validation/offline — 12 variables, required: false
+        validation/offline/algo_names:
+          dtype: S1
+          dimensions: [num_reaches, num_algos, nchar]
+          required: false
+        validation/offline/gageid:
+          dtype: S1
+          dimensions: [num_reaches, nchar]
+          required: false
+        validation/offline/has_validation:
+          dtype: i4
+          dimensions: [num_reaches]
+          required: false
+        validation/offline/kge:
+          dtype: f8
+          dimensions: [num_reaches, num_algos]
+          required: false
+        validation/offline/nbias:
+          dtype: f8
+          dimensions: [num_reaches, num_algos]
+          required: false
+        validation/offline/nrmse:
+          dtype: f8
+          dimensions: [num_reaches, num_algos]
+          required: false
+        validation/offline/nse:
+          dtype: f8
+          dimensions: [num_reaches, num_algos]
+          required: false
+        validation/offline/rmse:
+          dtype: f8
+          dimensions: [num_reaches, num_algos]
+          required: false
+        validation/offline/rsq:
+          dtype: f8
+          dimensions: [num_reaches, num_algos]
+          required: false
+        validation/offline/sige:
+          dtype: f8
+          dimensions: [num_reaches, num_algos]
+          required: false
+        validation/offline/spearmanr:
+          dtype: f8
+          dimensions: [num_reaches, num_algos]
+          required: false
+        validation/offline/testn:
+          dtype: f8
+          dimensions: [num_reaches, num_algos]
+          required: false
+        # --- validation/moi — 12 variables, required: false
+        validation/moi/algo_names:
+          dtype: S1
+          dimensions: [num_reaches, num_algos, nchar]
+          required: false
+        validation/moi/gageid:
+          dtype: S1
+          dimensions: [num_reaches, nchar]
+          required: false
+        validation/moi/has_validation:
+          dtype: i4
+          dimensions: [num_reaches]
+          required: false
+        validation/moi/kge:
+          dtype: f8
+          dimensions: [num_reaches, num_algos]
+          required: false
+        validation/moi/nbias:
+          dtype: f8
+          dimensions: [num_reaches, num_algos]
+          required: false
+        validation/moi/nrmse:
+          dtype: f8
+          dimensions: [num_reaches, num_algos]
+          required: false
+        validation/moi/nse:
+          dtype: f8
+          dimensions: [num_reaches, num_algos]
+          required: false
+        validation/moi/rmse:
+          dtype: f8
+          dimensions: [num_reaches, num_algos]
+          required: false
+        validation/moi/rsq:
+          dtype: f8
+          dimensions: [num_reaches, num_algos]
+          required: false
+        validation/moi/sige:
+          dtype: f8
+          dimensions: [num_reaches, num_algos]
+          required: false
+        validation/moi/spearmanr:
+          dtype: f8
+          dimensions: [num_reaches, num_algos]
+          required: false
+        validation/moi/testn:
+          dtype: f8
+          dimensions: [num_reaches, num_algos]
+          required: false
+        # --- validation/flpe — 12 variables, required: false
+        validation/flpe/algo_names:
+          dtype: S1
+          dimensions: [num_reaches, num_algos, nchar]
+          required: false
+        validation/flpe/gageid:
+          dtype: S1
+          dimensions: [num_reaches, nchar]
+          required: false
+        validation/flpe/has_validation:
+          dtype: i4
+          dimensions: [num_reaches]
+          required: false
+        validation/flpe/kge:
+          dtype: f8
+          dimensions: [num_reaches, num_algos]
+          required: false
+        validation/flpe/nbias:
+          dtype: f8
+          dimensions: [num_reaches, num_algos]
+          required: false
+        validation/flpe/nrmse:
+          dtype: f8
+          dimensions: [num_reaches, num_algos]
+          required: false
+        validation/flpe/nse:
+          dtype: f8
+          dimensions: [num_reaches, num_algos]
+          required: false
+        validation/flpe/rmse:
+          dtype: f8
+          dimensions: [num_reaches, num_algos]
+          required: false
+        validation/flpe/rsq:
+          dtype: f8
+          dimensions: [num_reaches, num_algos]
+          required: false
+        validation/flpe/sige:
+          dtype: f8
+          dimensions: [num_reaches, num_algos]
+          required: false
+        validation/flpe/spearmanr:
+          dtype: f8
+          dimensions: [num_reaches, num_algos]
+          required: false
+        validation/flpe/testn:
+          dtype: f8
+          dimensions: [num_reaches, num_algos]
+          required: false
+        # --- lakeflow — 21 variables, required: false
+        lakeflow/a0_lakeflow:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        lakeflow/bayes_q:
+          dtype: f8
+          dimensions: [num_reaches, lakeflow_dates]
+          required: false
+        lakeflow/bayes_q_sd:
+          dtype: f8
+          dimensions: [num_reaches, lakeflow_dates]
+          required: false
+        lakeflow/da:
+          dtype: f8
+          dimensions: [num_reaches, lakeflow_dates]
+          required: false
+        lakeflow/dv:
+          dtype: f8
+          dimensions: [num_reaches, lakeflow_dates]
+          required: false
+        lakeflow/et:
+          dtype: f8
+          dimensions: [num_reaches, lakeflow_dates]
+          required: false
+        lakeflow/lake_id:
+          dtype: i8
+          dimensions: [num_reaches]
+          required: false
+        lakeflow/lakeflow_date:
+          dtype: i8
+          dimensions: [lakeflow_dates]
+          required: false
+        lakeflow/n_lakeflow:
+          dtype: f8
+          dimensions: [num_reaches, lakeflow_dates]
+          required: false
+        lakeflow/n_lakeflow_sd:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        lakeflow/prior_fit:
+          dtype: i4
+          dimensions: [num_reaches]
+          required: false
+        lakeflow/q_lakeflow:
+          dtype: f8
+          dimensions: [num_reaches, lakeflow_dates]
+          required: false
+        lakeflow/q_lower:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        lakeflow/q_model:
+          dtype: f8
+          dimensions: [num_reaches, lakeflow_dates]
+          required: false
+        lakeflow/q_upper:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        lakeflow/slope2:
+          dtype: f8
+          dimensions: [num_reaches, lakeflow_dates]
+          required: false
+        lakeflow/storage:
+          dtype: f8
+          dimensions: [num_reaches, lakeflow_dates]
+          required: false
+        lakeflow/tributary:
+          dtype: f8
+          dimensions: [num_reaches, lakeflow_dates]
+          required: false
+        lakeflow/type:
+          dtype: i4
+          dimensions: [num_reaches]
+          required: false
+        lakeflow/width:
+          dtype: f8
+          dimensions: [num_reaches, lakeflow_dates]
+          required: false
+        lakeflow/wse:
+          dtype: f8
+          dimensions: [num_reaches, lakeflow_dates]
+          required: false
+        # --- consensus — 2 variables, required: false
+        consensus/consensus_q:
+          dtype: f8
+          dimensions: [num_reaches]
+          required: false
+        consensus/time_int:
+          dtype: i8
+          dimensions: [num_reaches]
+          required: false
+  consumes: []   # TODO: P1-17 cross-check needs the per-module reach files this reads

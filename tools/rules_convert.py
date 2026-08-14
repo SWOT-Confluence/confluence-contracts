@@ -4,11 +4,17 @@ This is a dev-time script that reads ``docs/sos-dataset/sos metadata.xlsx`` and
 writes ``src/cit/resources/rules/sos_results_rules.yml``.  The CIT runtime consumes
 that YAML file but never imports openpyxl; only this script does.
 
+Each generated artifact declares the ``module_name`` and ``filepath`` it governs, so the
+runtime can load several rules artifacts and match each one to the produced file it applies
+to — the same way it loads several ``contracts/*.yml`` and keys them by module name.
+
 Usage::
 
     python tools/rules_convert.py
         --source '/path/to/docs/sos-dataset/sos metadata.xlsx'
         --output src/cit/resources/rules/sos_results_rules.yml
+        --module-name output
+        --filepath 'output/sos/{continent_id}_sword_v{number}_SOS_results.nc'
 """
 
 import argparse
@@ -79,6 +85,20 @@ _INT_TYPE_PREFIX = "Int"
 # ---------------------------------------------------------------------------
 _DEFAULT_OUTPUT: Path = (
     Path(__file__).parent.parent / "src" / "cit" / "resources" / "rules" / "sos_results_rules.yml"
+)
+
+# ---------------------------------------------------------------------------
+# Target the generated artifact governs
+# ---------------------------------------------------------------------------
+# The spreadsheet describes the aggregated SoS results file, which the `output` module
+# writes one of per continent. These are defaults rather than constants so the same
+# converter can emit a second artifact (e.g. the SoS priors sheets) for another target.
+_DEFAULT_MODULE_NAME = "output"
+# Matches contracts/output.yml, which was seeded from a real production granule: published SoS
+# granules carry the run type and the three timestamps, not just continent and SWORD version.
+_DEFAULT_FILEPATH = (
+    "output/sos/{continent_id}_sword_v{number}_SOS_results"
+    "_{run_type}_{time_coverage_start}_{time_coverage_end}_{date_created}.nc"
 )
 
 # ---------------------------------------------------------------------------
@@ -205,6 +225,50 @@ def parse_fill_values(wb: openpyxl.Workbook) -> dict:
     return result
 
 
+def check_target(module_name: str, filepath: str) -> list[str]:
+    """Check the declared target against the bundled contracts.
+
+    A rules artifact is matched to a produced file by its ``module_name`` and ``filepath``, so a
+    typo in either silently prevents the rules from ever running. Catching that here means a bad
+    target never reaches disk.
+
+    The ``cit`` import is deferred and tolerated so this dev-time script still runs when the
+    package is not installed, and so importing it costs nothing on the ``--help`` path.
+
+    Args:
+        module_name: The module the generated artifact will declare.
+        filepath: The produced-file path template the generated artifact will declare.
+
+    Returns:
+        One human-readable problem per failed check, or an empty list when the target resolves.
+    """
+    try:
+        from cit.contract import Contract
+        from cit.data import find_contract_files, load_yaml
+    except ImportError:
+        return ["cit is not importable; skipped the contract cross-check"]
+
+    contracts = {}
+    for contract_file in find_contract_files():
+        contract = Contract.model_validate(load_yaml(contract_file))
+        contracts[contract.module.name] = contract
+
+    if module_name not in contracts:
+        return [
+            f"--module-name {module_name!r} has no contract "
+            f"(have: {', '.join(sorted(contracts))})"
+        ]
+
+    produced = {produces.filepath for produces in contracts[module_name].module.produces}
+    if filepath not in produced:
+        return [
+            f"--filepath {filepath!r} is not produced by the {module_name!r} contract "
+            f"(declared: {', '.join(sorted(produced))})"
+        ]
+
+    return []
+
+
 def main() -> None:
     """Parse the SoS metadata spreadsheet and write the YAML rules artifact."""
     parser = argparse.ArgumentParser(
@@ -222,14 +286,50 @@ def main() -> None:
         metavar="PATH",
         help=(f"Destination path for the generated YAML file (default: {_DEFAULT_OUTPUT})."),
     )
+    parser.add_argument(
+        "--module-name",
+        default=_DEFAULT_MODULE_NAME,
+        metavar="NAME",
+        help=(
+            "Name of the module whose produced file these rules govern "
+            f"(default: {_DEFAULT_MODULE_NAME})."
+        ),
+    )
+    parser.add_argument(
+        "--filepath",
+        default=_DEFAULT_FILEPATH,
+        metavar="TEMPLATE",
+        help=(
+            "Path template, relative to the run mount, of the produced file these rules "
+            f"govern (default: {_DEFAULT_FILEPATH})."
+        ),
+    )
+
+    parser.add_argument(
+        "--require-contract",
+        action="store_true",
+        help=(
+            "Fail instead of warning when --module-name/--filepath match no bundled contract. "
+            "Off by default: a rules artifact may legitimately be generated before its contract "
+            "exists. CI should set it once the pair has settled."
+        ),
+    )
 
     args = parser.parse_args()
     source = Path(args.source)
     output = Path(args.output)
 
+    problems = check_target(args.module_name, args.filepath)
+    for problem in problems:
+        print(f"WARNING: {problem}")  # noqa: T201
+    if problems and args.require_contract:
+        raise SystemExit("aborted: --require-contract is set and the target matches no contract")
+
     wb = openpyxl.load_workbook(source, read_only=True, data_only=True)
 
     data = {
+        "module_name": args.module_name,
+        "filepath": args.filepath,
         "global_attributes": parse_global_attributes(wb),
         "variable_attributes": parse_variable_attributes(wb),
         "fill_values": parse_fill_values(wb),

@@ -33,7 +33,7 @@ from typing import get_args
 import netCDF4 as nc
 import numpy as np
 
-from cit.models import DataType
+from cit.contract import DataType
 
 
 class Netcdf:
