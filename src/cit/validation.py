@@ -311,6 +311,16 @@ class ContractValidator(Validator):
 class RulesValidator(Validator):
     """"""
 
+    FILL_ATTRS = ("_FillValue", "missing_value", "fill")
+    TOKEN_TO_FILL_TYPES = {
+        "f4": ("Float",),
+        "f8": ("Float",),
+        "i4": ("Int", "Int9"),
+        "i8": ("Int", "Int9"),
+        "S1": ("Char",),
+        "str": ("Char",),
+    }
+
     def validate(self, context: ValidatorContext):
         """"""
         if not context.rules:
@@ -324,7 +334,7 @@ class RulesValidator(Validator):
 
         return [
             *self._check_global_attributes(rules.global_attributes, result.global_attributes.keys(), module_name, filepath, strict),
-            *self._check_variables_attributes(rules.variable_attributes, result.variable_attributes, rules.fill_values, module_name, filepath, strict)
+            *self._check_variables_attributes(rules.variable_attributes, result, rules.fill_values, module_name, filepath, strict)
         ]
 
     def _check_global_attributes(self, rule, result, module_name, filepath, strict):
@@ -380,10 +390,9 @@ class RulesValidator(Validator):
         }
 
         result_attributes = {
-            group: set(variables.keys())
-            for group, variables in result.items()
+            variable: set(attributes)
+            for variable, attributes in result.variable_attributes.items()
         }
-
 
         missing, extra, common = _partition(rule_attributes.keys(), result_attributes.keys())
         findings: list[Finding] = []
@@ -413,12 +422,22 @@ class RulesValidator(Validator):
             )
 
         for name in common:
-            variable_findings = self._check_variable_attributes(rule_attributes[name], result_attributes[name], name, fill_values, module_name, filepath, strict)
+            attributes = result.variable_attributes[name]
+
+            variable_findings = self._check_variable_attributes(rule_attributes[name], result_attributes[name], name, module_name, filepath, strict)
             findings.extend(variable_findings)
+
+            finding = self._check_valid_min_max(attributes, name, module_name, filepath, strict)
+            if finding is not None:
+                findings.append(finding)
+
+            finding = self._check_fill_value(attributes, result.variables[name].dtype, fill_values, name, module_name, filepath, strict)
+            if finding is not None:
+                findings.append(finding)
 
         return findings
 
-    def _check_variable_attributes(self, rule, result, var_name, fill_values, module_name, filepath, strict):
+    def _check_variable_attributes(self, rule, result, var_name, module_name, filepath, strict):
         """"""
         missing, extra, common = _partition(rule, result)
         findings: list[Finding] = []
@@ -448,8 +467,6 @@ class RulesValidator(Validator):
             )
 
         for name in common:
-            # Need to check fill values
-            # Need to check max < min when both are numbers
             findings.append(
                 Finding(
                     type=FindingType.PASSED,
@@ -462,6 +479,122 @@ class RulesValidator(Validator):
             )
 
         return findings
+
+    def _check_valid_min_max(
+        self, variable, var_name, module_name, filepath, strict
+    ) -> Finding | None:
+        """Check that a variable's valid_min does not exceed its valid_max.
+
+        Both bounds are coerced with :func:`_numeric` before comparison, because netCDF reports
+        them as numpy scalars and because the SoS spreadsheet carries a handful of non-numeric
+        bounds (``'inf'``, ``'inf; 9.99999999998E11'``). A bound that will not coerce is skipped
+        rather than guessed at.
+
+        Args:
+            variable: One variable's attributes, as read from the file.
+            var_name: The group-qualified variable name, carried onto the finding.
+            module_name: The module being validated.
+            filepath: The produced file's contract path template.
+            strict: When True, an inverted range fails the run rather than warning.
+
+        Returns:
+            A PASSED finding when the range is ordered, a DIFFERENT finding when it is inverted, or
+            ``None`` when either bound is absent or non-numeric.
+        """
+        minimum = _numeric(variable.get("valid_min"))
+        maximum = _numeric(variable.get("valid_max"))
+
+        if minimum is None or maximum is None:
+            return None
+
+        if minimum <= maximum:
+            return Finding(
+                type=FindingType.PASSED,
+                status=FindingStatus.INFO,
+                module_name=module_name,
+                component=var_name,
+                filepath=filepath,
+                validation="rule",
+            )
+
+        return Finding(
+            type=FindingType.DIFFERENT,
+            status=FindingStatus.FAIL if strict else FindingStatus.WARN,
+            module_name=module_name,
+            component=var_name,
+            filepath=filepath,
+            validation="rule",
+            message=f"(valid_min: {minimum}) exceeds (valid_max: {maximum})",
+        )
+
+
+    def _check_fill_value(
+        self, variable, dtype, fill_values, var_name, module_name, filepath, strict
+    ) -> Finding | None:
+        """Check a variable's declared fill value against the canonical value for its type.
+
+        netCDF forbids ``_FillValue`` on VLEN types, so some variables carry ``missing_value`` or
+        the non-standard ``fill`` instead, and some declare none at all. The first of
+        :attr:`FILL_ATTRS` present wins; an absent declaration is not a violation, because the
+        format itself prevents it.
+
+        Args:
+            variable: One variable's attributes, as read from the file.
+            dtype: The variable's contract dtype token (``f8``, ``i4``, ``S1``, ``str``, ...).
+            fill_values: The canonical fill values from the rules artifact, keyed by type name.
+            var_name: The group-qualified variable name, carried onto the finding.
+            module_name: The module being validated.
+            filepath: The produced file's contract path template.
+            strict: When True, a mismatch fails the run rather than warning.
+
+        Returns:
+            A PASSED finding when the declared fill value is canonical, a DIFFERENT finding when it
+            is not or when the dtype has no canonical fill value, or ``None`` when the variable
+            declares no fill value at all.
+        """
+        declared = next(
+            ((name, variable[name]) for name in self.FILL_ATTRS if name in variable), None
+        )
+        if declared is None:
+            return None
+
+        attr_name, value = declared
+
+        # An unmapped dtype means CIT cannot check this variable
+        fill_types = self.TOKEN_TO_FILL_TYPES.get(dtype)
+        if fill_types is None:
+            return Finding(
+                type=FindingType.DIFFERENT,
+                status=FindingStatus.WARN,  # never escalated: a gap in CIT, not in the data
+                module_name=module_name,
+                component=f"{var_name}.{attr_name}",
+                filepath=filepath,
+                message=f"dtype {dtype!r} has no canonical fill value; fill value not checked",
+                validation="rule",
+            )
+
+        # Indexed, not filtered: a missing key means a malformed rules artifact
+        expected = [fill_values[name] for name in fill_types]
+        if any(_same_fill(value, candidate) for candidate in expected):
+            return Finding(
+                type=FindingType.PASSED,
+                status=FindingStatus.INFO,
+                module_name=module_name,
+                component=var_name,
+                filepath=filepath,
+                message=f"{value!r} is canonical for dtype {dtype!r}",
+                validation="rule",
+            )
+
+        return Finding(
+            type=FindingType.DIFFERENT,
+            status=FindingStatus.FAIL if strict else FindingStatus.WARN,
+            module_name=module_name,
+            component=f"{var_name}.{attr_name}",
+            filepath=filepath,
+            message=f"(rule fill: {expected}) and (result fill: {value!r}) for dtype {dtype!r}",
+            validation="rule",
+        )
 
 
 def _partition(
@@ -488,4 +621,43 @@ def _partition(
         sorted(contract_names - result_names),  # missing
         sorted(result_names - contract_names),  # extra
         sorted(contract_names & result_names),  # matched
+    )
+
+
+def _numeric(value: object) -> float | None:
+    """Return value as a float, or None when it is not numeric."""
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _same_fill(actual: object, expected: object) -> bool:
+    """Compare a declared fill value against a canonical one, across bytes, str and numeric forms.
+
+    An ``S1`` variable's ``_FillValue`` reads back from netCDF as ``bytes`` (``b"x"``) while the
+    rules artifact holds the string ``"x"``, so bytes are decoded first. The string comparison must
+    precede the numeric one: routing ``"x"`` through :func:`_numeric` yields ``None`` and would
+    report every char variable as mismatched.
+
+    Args:
+        actual: The fill value declared on the variable.
+        expected: A canonical fill value from the rules artifact.
+
+    Returns:
+        True when the two denote the same fill value. ``nan`` never matches, which is intended --
+        it is not the SoS fill value for any type.
+    """
+    if isinstance(actual, bytes):  # np.bytes_ subclasses bytes, so this covers both
+        actual = actual.decode()
+
+    if isinstance(actual, str) or isinstance(expected, str):
+        return str(actual) == str(expected)
+
+    actual_number, expected_number = _numeric(actual), _numeric(expected)
+
+    return (
+        actual_number is not None
+        and expected_number is not None
+        and actual_number == expected_number
     )

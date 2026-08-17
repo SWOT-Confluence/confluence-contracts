@@ -94,3 +94,4 @@ class Report:
             findings: The check outcomes collected across a validation run.
         """
         self._findings = findings
+        # for finding in findings: print(finding)
