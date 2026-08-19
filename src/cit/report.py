@@ -8,7 +8,7 @@ and "an actual file" are never confused.
 ``FindingStatus`` (how it bears on the exit code), so severity can be re-weighted -- e.g. by
 ``--strict`` -- without changing what a validator reports.
 
-``Report`` aggregates findings, deduplicates them for display (see :meth:`Report.deduplicated`),
+``Report`` aggregates findings, deduplicates them for display (see :attr:`Report.deduplicated`),
 groups them along an arbitrary axis (see :meth:`Report.grouped_by`), and applies the exit policy
 (see :attr:`Report.exit_code`) -- any ``FAIL`` fails the run, a ``WARN``-only or empty run
 passes, and ``REPORT`` findings never affect the exit code, even under ``--strict``.
@@ -36,10 +36,11 @@ Planned (P1-9, remaining):
 
 import csv
 import importlib.metadata
-from collections import Counter
+from collections import Counter, defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass, field, fields, replace
 from enum import StrEnum
+from functools import cached_property
 from pathlib import Path
 
 from cit.contract import Contract
@@ -218,7 +219,7 @@ class Report:
             show_passed: When True, ``__str__`` also renders components whose findings are all
                 PASSED, not just the ones with at least one non-PASSED finding.
         """
-        self._findings = findings
+        self._findings = list(findings)
         self._contracts = contracts or {}
         self._show_passed = show_passed
 
@@ -248,29 +249,33 @@ class Report:
         """
         return 1 if any(finding.status is FindingStatus.FAIL for finding in self._findings) else 0
 
-    def deduplicated(self) -> list[DedupedFinding]:
+    @cached_property
+    def deduplicated(self) -> tuple[DedupedFinding, ...]:
         """Collapse findings that differ only by ``results_file`` into one entry each.
 
         At mount scale the same findings recur once per produced file (e.g. the same 39 momma
         findings printed 19 times, once per reach file); deduplicating on every field except
         ``results_file`` turns that repetition into one entry annotated with how many files --
-        and which ones -- it was seen in.
+        and which ones -- it was seen in. Computed once per :class:`Report` instance and cached:
+        ``self._findings`` never changes after construction (``__init__`` copies its argument),
+        so this only ever needs to run once. Returns a tuple of frozen ``DedupedFinding``
+        entries (whose own ``files`` field is already a tuple) rather than a list, so the whole
+        result is immutable and a caller cannot corrupt the cache for a later read -- unlike a
+        plain method, a ``cached_property`` cannot hand back a defensive copy per access, since
+        the cached attribute *is* the returned object.
 
         Returns:
             One :class:`DedupedFinding` per distinct finding (all fields but ``results_file``),
             sorted deterministically by :func:`_sort_key`.
         """
-        entries: dict[Finding, tuple[int, list[str]]] = {}
+        entries: dict[Finding, list[str]] = defaultdict(list)
         for finding in self._findings:
-            key = replace(finding, results_file="")
-            count, files = entries.get(key, (0, []))
-            files.append(finding.results_file)
-            entries[key] = (count + 1, files)
+            entries[replace(finding, results_file="")].append(finding.results_file)
         deduped = [
-            DedupedFinding(finding=key, count=count, files=tuple(sorted(set(files))))
-            for key, (count, files) in entries.items()
+            DedupedFinding(finding=key, count=len(files), files=tuple(sorted(set(files))))
+            for key, files in entries.items()
         ]
-        return sorted(deduped, key=lambda entry: _sort_key(entry.finding))
+        return tuple(sorted(deduped, key=lambda entry: _sort_key(entry.finding)))
 
     def grouped_by(self, key: Callable[[Finding], str]) -> dict[str, list[Finding]]:
         """Group findings by an arbitrary key, in a deterministic order.
@@ -298,7 +303,7 @@ class Report:
     def write_csv(self, path: str | Path) -> None:
         """Write every raw finding to ``path`` as CSV, one row per occurrence.
 
-        Unlike ``__str__`` (deduplicated for readability) or :meth:`deduplicated`, this is the
+        Unlike ``__str__`` (deduplicated for readability) or :attr:`deduplicated`, this is the
         un-deduplicated escape hatch for triage: every ``results_file`` a finding was seen in
         gets its own row, so the odd file out is recoverable in a spreadsheet. Uses only the
         stdlib ``csv`` module -- pandas/rich/tabulate are not runtime dependencies of CIT.
@@ -365,7 +370,7 @@ class Report:
         Returns:
             E.g. ``FAIL 58   WARN 428   PASS 632   1118 findings over 25 files, 2 modules``.
         """
-        deduped = self.deduplicated()
+        deduped = self.deduplicated
         counts = Counter(entry.finding.status for entry in deduped)
         parts = [
             f"FAIL {counts.get(FindingStatus.FAIL, 0)}",
@@ -386,7 +391,7 @@ class Report:
         """Render the findings, grouped module -> produced-file template -> component.
 
         Deduplicated entries are used throughout, so each rendered line stands for however many
-        raw occurrences it collapsed (see :meth:`deduplicated`). Components are ranked by their
+        raw occurrences it collapsed (see :attr:`deduplicated`). Components are ranked by their
         worst severity so a FAIL-bearing component sorts before a WARN-only one, then by name;
         by default only components with at least one non-PASSED finding are shown, but every
         finding for a shown component (PASSED included) renders together.
@@ -394,7 +399,7 @@ class Report:
         Returns:
             The rendered findings, or ``""`` if there is nothing to show.
         """
-        deduped = self.deduplicated()
+        deduped = self.deduplicated
         if not deduped:
             return ""
 

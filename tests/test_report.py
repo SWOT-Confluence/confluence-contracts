@@ -83,7 +83,7 @@ def test_dedup_collapses_findings_differing_only_by_results_file():
     seen_in_a = _finding(results_file="a_momma.nc")
     seen_in_b = replace(seen_in_a, results_file="b_momma.nc")
 
-    (entry,) = Report([seen_in_a, seen_in_b]).deduplicated()
+    (entry,) = Report([seen_in_a, seen_in_b]).deduplicated
 
     assert entry.count == 2
     assert entry.files == ("a_momma.nc", "b_momma.nc")
@@ -95,7 +95,7 @@ def test_dedup_keeps_separate_entries_for_different_messages():
     expected_f4 = _finding(message="expected f4, got f8")
     expected_i4 = replace(expected_f4, message="expected i4, got i8")
 
-    entries = Report([expected_f4, expected_i4]).deduplicated()
+    entries = Report([expected_f4, expected_i4]).deduplicated
 
     assert len(entries) == 2
 
@@ -105,9 +105,64 @@ def test_dedup_keeps_separate_entries_for_same_component_different_check():
     as_dimension = _finding(component="nt", check="dimension")
     as_variable = replace(as_dimension, check="variable")
 
-    entries = Report([as_dimension, as_variable]).deduplicated()
+    entries = Report([as_dimension, as_variable]).deduplicated
 
     assert len(entries) == 2
+
+
+def test_deduplicated_is_cached_after_first_call():
+    """Deduplicated computes once per Report instance; the second access reuses the cache.
+
+    ``cached_property`` stores its computed value in the instance ``__dict__`` under the
+    property's own name, so checking for that key is a reliable way to detect that the
+    computation ran (and ran exactly once) without reaching into private call-counting.
+    """
+    report = Report([_finding()])
+
+    assert "deduplicated" not in report.__dict__
+
+    first = report.deduplicated
+
+    assert "deduplicated" in report.__dict__
+
+    second = report.deduplicated
+
+    assert first == second
+
+
+def test_deduplicated_returns_an_immutable_sequence():
+    """Deduplicated is a tuple of frozen entries, so a caller cannot corrupt the cached value."""
+    report = Report([_finding()])
+
+    deduped = report.deduplicated
+
+    assert isinstance(deduped, tuple)
+    with pytest.raises(AttributeError):
+        deduped.clear()
+    with pytest.raises(TypeError):
+        deduped[0] = deduped[0]
+
+
+def test_init_copies_findings_list():
+    """__init__ copies its argument, so mutating the caller's list after construction is inert."""
+    findings = [_finding()]
+    report = Report(findings)
+
+    findings.append(_finding(component="other"))
+
+    assert len(report.findings) == 1
+    assert len(report.deduplicated) == 1
+
+
+def test_deduplicated_count_equals_len_files():
+    """Count is the raw occurrence count, which always equals len(files) (no duplicate files)."""
+    seen_in_a = _finding(results_file="a_momma.nc")
+    seen_in_b = replace(seen_in_a, results_file="b_momma.nc")
+    seen_in_c = replace(seen_in_a, results_file="c_momma.nc")
+
+    (entry,) = Report([seen_in_a, seen_in_b, seen_in_c]).deduplicated
+
+    assert entry.count == len(entry.files) == 3
 
 
 def test_exit_code_is_1_with_any_fail():
