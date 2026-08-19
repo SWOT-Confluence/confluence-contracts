@@ -68,21 +68,31 @@ def _status(escalate: bool) -> FindingStatus:
 
 @dataclass(frozen=True)
 class _Reporter:
-    """Binds the three ``Finding`` fields that are invariant across one validator run.
+    """Binds the ``Finding`` fields that are invariant across one validator run.
 
     Attributes:
         module_name: The module being validated (e.g. ``momma``).
         filepath: The produced file's contract path template.
         validation: Which validation produced the finding (``contract`` or ``rule``), so a report
             can group by check and ``--strict`` can escalate only rule findings.
+        results_file: The resolved produced file this run is checking, set once per file from
+            ``result.filepath``. Defaults to ``""`` for callers (e.g. tests) built before a
+            result file is known.
     """
 
     module_name: str
     filepath: str
     validation: str
+    results_file: str = ""
 
     def finding(
-        self, finding_type: FindingType, status: FindingStatus, component: str, message: str = ""
+        self,
+        finding_type: FindingType,
+        status: FindingStatus,
+        component: str,
+        message: str = "",
+        *,
+        check: str,
     ) -> Finding:
         """Build one finding, filling in the run-invariant fields.
 
@@ -91,6 +101,8 @@ class _Reporter:
             status: How the finding bears on the exit policy.
             component: The dimension, variable or attribute this finding is about.
             message: Optional detail, e.g. the disagreeing expected and actual values.
+            check: What kind of thing was examined (``dimension``, ``variable``, ``attribute``,
+                or ``global_attribute``).
 
         Returns:
             The assembled finding.
@@ -103,6 +115,8 @@ class _Reporter:
             filepath=self.filepath,
             message=message,
             validation=self.validation,
+            results_file=self.results_file,
+            check=check,
         )
 
     def partition(
@@ -110,6 +124,7 @@ class _Reporter:
         expected: Iterable[str],
         actual: Iterable[str],
         *,
+        check: str,
         component: Callable[[str], str] = str,
         missing_status: FindingStatus | Callable[[str], FindingStatus] = FindingStatus.FAIL,
         on_common: Callable[[str], list[Finding]] | None = None,
@@ -122,6 +137,8 @@ class _Reporter:
         Args:
             expected: The names the EXPECTED side declares.
             actual: The names the produced file actually holds.
+            check: What kind of thing was examined (``dimension``, ``variable``, ``attribute``,
+                or ``global_attribute``), carried onto every finding this call produces.
             component: Maps a name to the finding's component, for qualifying a name under its
                 parent (e.g. an attribute under its variable).
             missing_status: The status for a declared-but-absent name, or a callable returning one
@@ -137,16 +154,24 @@ class _Reporter:
 
         for name in missing:
             status = missing_status(name) if callable(missing_status) else missing_status
-            findings.append(self.finding(FindingType.MISSING, status, component(name)))
+            findings.append(
+                self.finding(FindingType.MISSING, status, component(name), check=check)
+            )
 
         for name in extra:
-            findings.append(self.finding(FindingType.EXTRA, FindingStatus.WARN, component(name)))
+            findings.append(
+                self.finding(FindingType.EXTRA, FindingStatus.WARN, component(name), check=check)
+            )
 
         for name in common:
             findings.extend(
                 on_common(name)
                 if on_common is not None
-                else [self.finding(FindingType.PASSED, FindingStatus.INFO, component(name))]
+                else [
+                    self.finding(
+                        FindingType.PASSED, FindingStatus.INFO, component(name), check=check
+                    )
+                ]
             )
 
         return findings
@@ -212,7 +237,7 @@ class ContractValidator(Validator):
         """
         contract = context.contract
         result = context.result
-        report = _Reporter(context.name, contract.filepath, "contract")
+        report = _Reporter(context.name, contract.filepath, "contract", result.filepath)
 
         return [
             *self._check_dimensions(report, contract, result),
@@ -236,7 +261,7 @@ class ContractValidator(Validator):
             One finding per dimension: FAIL if declared but absent, WARN if present but
             undeclared, INFO if present on both sides.
         """
-        return report.partition(contract.dimensions, result.dimensions)
+        return report.partition(contract.dimensions, result.dimensions, check="dimension")
 
     def _check_variables(
         self, report: _Reporter, contract: Produces, result: NetcdfResult
@@ -259,6 +284,7 @@ class ContractValidator(Validator):
         return report.partition(
             contract.variables,
             result.variables,
+            check="variable",
             missing_status=lambda name: _status(contract.variables[name].required),
             on_common=lambda name: self._check_variable(
                 report, name, contract.variables[name], result.variables[name]
@@ -297,6 +323,7 @@ class ContractValidator(Validator):
                     FindingStatus.FAIL,
                     name,
                     f"(contract dtype: {contract.dtype}) and (result dtype: {result.dtype})",
+                    check="variable",
                 )
             )
 
@@ -306,11 +333,14 @@ class ContractValidator(Validator):
                     FindingType.DIFFERENT,
                     FindingStatus.FAIL,
                     name,
-                    f"(contract shape: {contract.dimensions}) and (result shape: {result.shape})",
+                    f"(contract dims: {contract.dimensions}) and (result dims: {result.dims})",
+                    check="variable",
                 )
             )
 
-        return findings or [report.finding(FindingType.PASSED, FindingStatus.INFO, name)]
+        return findings or [
+            report.finding(FindingType.PASSED, FindingStatus.INFO, name, check="variable")
+        ]
 
 
 class RulesValidator(Validator):
@@ -355,7 +385,7 @@ class RulesValidator(Validator):
         rules = context.rules
         result = context.result
         strict = context.strict
-        report = _Reporter(context.name, rules.filepath, "rule")
+        report = _Reporter(context.name, rules.filepath, "rule", result.filepath)
 
         return [
             *self._check_global_attributes(report, rules.global_attributes, result, strict),
@@ -376,7 +406,9 @@ class RulesValidator(Validator):
         Returns:
             One finding per global attribute.
         """
-        return report.partition(rule, result.global_attributes, missing_status=_status(strict))
+        return report.partition(
+            rule, result.global_attributes, check="global_attribute", missing_status=_status(strict)
+        )
 
     def _check_variables_attributes(
         self, report: _Reporter, rules: MetadataRules, result: NetcdfResult, strict: bool
@@ -406,6 +438,7 @@ class RulesValidator(Validator):
         findings = report.partition(
             rule_attributes,
             result_attributes,
+            check="variable",
             missing_status=_status(strict),
             on_common=lambda name: self._check_variable_attributes(
                 report, rule_attributes[name], result_attributes[name], name, strict
@@ -457,6 +490,7 @@ class RulesValidator(Validator):
         return report.partition(
             rule,
             set(result) - set(self.FILL_ATTRS),
+            check="attribute",
             component=lambda attribute: f"{var_name}.{attribute}",
             missing_status=_status(strict),
         )
@@ -490,6 +524,7 @@ class RulesValidator(Validator):
                         _status(strict),
                         f"{var_name}.{name}",
                         "required by the SoS metadata spec",
+                        check="attribute",
                     )
                 )
 
@@ -521,13 +556,16 @@ class RulesValidator(Validator):
             return None
 
         if minimum <= maximum:
-            return report.finding(FindingType.PASSED, FindingStatus.INFO, var_name)
+            return report.finding(
+                FindingType.PASSED, FindingStatus.INFO, var_name, check="attribute"
+            )
 
         return report.finding(
             FindingType.DIFFERENT,
             _status(strict),
             var_name,
             f"(valid_min: {minimum}) exceeds (valid_max: {maximum})",
+            check="attribute",
         )
 
     def _check_fill_value(
@@ -574,6 +612,7 @@ class RulesValidator(Validator):
                 FindingStatus.WARN,  # never escalated: a gap in CIT, not in the data
                 f"{var_name}.{attr_name}",
                 f"dtype {dtype!r} has no canonical fill value; fill value not checked",
+                check="attribute",
             )
 
         # Indexed, not filtered: a missing key means a malformed rules artifact
@@ -584,6 +623,7 @@ class RulesValidator(Validator):
                 FindingStatus.INFO,
                 f"{var_name}.{attr_name}",
                 f"{value!r} is canonical for dtype {dtype!r}",
+                check="attribute",
             )
 
         return report.finding(
@@ -591,6 +631,7 @@ class RulesValidator(Validator):
             _status(strict),
             f"{var_name}.{attr_name}",
             f"(rule fill: {expected}) and (result fill: {value!r}) for dtype {dtype!r}",
+            check="attribute",
         )
 
 

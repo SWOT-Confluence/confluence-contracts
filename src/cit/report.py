@@ -17,7 +17,7 @@ Planned (P1-9):
   change the exit code, even under ``--strict``) joins ``FindingStatus`` with those checks.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 
 
@@ -71,8 +71,17 @@ class Finding:
         status: How the finding bears on the exit policy (see :class:`FindingStatus`).
         module_name: The module whose contract was checked (e.g. ``momma``).
         component: The dimension or variable this finding is about.
-        filepath: The produced file the finding came from.
+        filepath: The contract's declared path template for the produced file (e.g.
+            ``flpe/momma/{reach_id}_momma.nc``), not the resolved file on disk.
+        validation: Which validation produced the finding (``contract`` or ``rule``), so a report
+            can group by check and ``--strict`` can escalate only rule findings.
         message: Optional detail, e.g. the disagreeing contract and result values.
+        results_file: The resolved produced file the finding came from (e.g.
+            ``flpe/momma/74267700071_momma.nc``), distinct from ``filepath``'s path template.
+        check: What kind of thing was examined -- ``dimension``, ``variable``, ``attribute`` or
+            ``global_attribute`` -- a different axis from ``validation`` (contract vs rule). Has
+            no default: every finding must name what it checked, so a missing value fails loudly
+            at construction rather than silently grouping unlike findings together.
     """
 
     type: FindingType
@@ -82,6 +91,8 @@ class Finding:
     filepath: str
     validation: str
     message: str = ""
+    results_file: str = ""
+    check: str = field(kw_only=True)
 
 
 class Report:
