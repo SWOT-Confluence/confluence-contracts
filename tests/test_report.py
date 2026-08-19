@@ -7,7 +7,9 @@ P1-9.2 ``Report``: deduplication, grouping, and the exit-code policy -- and the 
 ``Report.__str__`` rendering: banner, legend, counts line, and component-first grouping.
 """
 
-from dataclasses import replace
+import csv
+from dataclasses import fields, replace
+from pathlib import Path
 
 import pytest
 
@@ -303,3 +305,88 @@ def test_show_passed_does_not_affect_exit_code():
     fail = _finding(type=FindingType.DIFFERENT, status=FindingStatus.FAIL)
 
     assert Report([fail], show_passed=True).exit_code == Report([fail]).exit_code == 1
+
+
+def test_write_csv_has_one_row_per_finding_no_deduplication(tmp_path: Path):
+    """write_csv writes every occurrence, unlike the deduplicated text report."""
+    findings = [
+        _finding(results_file="flpe/momma/1_momma.nc"),
+        _finding(results_file="flpe/momma/2_momma.nc"),
+        _finding(results_file="flpe/momma/3_momma.nc"),
+    ]
+    csv_path = tmp_path / "report.csv"
+
+    Report(findings).write_csv(csv_path)
+
+    with csv_path.open(newline="", encoding="utf-8") as csv_file:
+        rows = list(csv.DictReader(csv_file))
+
+    assert len(rows) == 3
+    assert {row["results_file"] for row in rows} == {
+        "flpe/momma/1_momma.nc",
+        "flpe/momma/2_momma.nc",
+        "flpe/momma/3_momma.nc",
+    }
+
+
+def test_write_csv_header_matches_finding_dataclass_fields(tmp_path: Path):
+    """The CSV header is derived from Finding's dataclass fields, in declared order."""
+    csv_path = tmp_path / "report.csv"
+
+    Report([_finding()]).write_csv(csv_path)
+
+    with csv_path.open(newline="", encoding="utf-8") as csv_file:
+        header = next(csv.reader(csv_file))
+
+    assert header == [f.name for f in fields(Finding)]
+
+
+def test_write_csv_accepts_str_path(tmp_path: Path):
+    """write_csv accepts a plain string path, not just a Path object."""
+    csv_path = tmp_path / "report.csv"
+
+    Report([_finding()]).write_csv(str(csv_path))
+
+    assert csv_path.exists()
+
+
+def test_write_csv_serializes_enum_fields_as_plain_strings(tmp_path: Path):
+    """type/status land as plain StrEnum values (e.g. 'MISSING'), not 'FindingType.MISSING'."""
+    csv_path = tmp_path / "report.csv"
+    finding = _finding(type=FindingType.MISSING, status=FindingStatus.FAIL)
+
+    Report([finding]).write_csv(csv_path)
+
+    with csv_path.open(newline="", encoding="utf-8") as csv_file:
+        row = next(csv.DictReader(csv_file))
+
+    assert row["type"] == "MISSING"
+    assert row["status"] == "FAIL"
+
+
+def test_write_csv_empty_report_writes_header_only(tmp_path: Path):
+    """An empty findings list still writes a valid CSV with just the header row."""
+    csv_path = tmp_path / "report.csv"
+
+    Report([]).write_csv(csv_path)
+
+    with csv_path.open(newline="", encoding="utf-8") as csv_file:
+        rows = list(csv.reader(csv_file))
+
+    assert rows == [[f.name for f in fields(Finding)]]
+
+
+def test_write_csv_row_order_is_deterministic(tmp_path: Path):
+    """Rows are ordered by the same sort key the text report uses, for a meaningful diff."""
+    findings = [
+        _finding(module_name="sad", status=FindingStatus.WARN, type=FindingType.EXTRA),
+        _finding(module_name="momma", status=FindingStatus.FAIL, type=FindingType.DIFFERENT),
+        _finding(module_name="hivdi", status=FindingStatus.INFO),
+    ]
+    first_path = tmp_path / "first.csv"
+    second_path = tmp_path / "second.csv"
+
+    Report(findings).write_csv(first_path)
+    Report(list(reversed(findings))).write_csv(second_path)
+
+    assert first_path.read_text() == second_path.read_text()

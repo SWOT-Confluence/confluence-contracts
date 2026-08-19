@@ -24,18 +24,23 @@ is shown only if at least one of its findings is not PASSED, and then *all* of i
 (including the PASSED ones) render together -- that adjacency is the point of the change.
 ``show_passed`` additionally reveals components whose findings are all PASSED.
 
+:meth:`Report.write_csv` (P1-9.4) exports every raw finding -- one row per occurrence, no
+deduplication -- as the triage escape hatch for the file-level detail the deduplicated text
+report deliberately drops.
+
 Planned (P1-9, remaining):
 
-- CSV export (9.4) of every raw finding.
 - CLI wiring (9.5): ``cit validate``/``cit parse`` and the locked ``print(report);
   sys.exit(report.exit_code)`` shape.
 """
 
+import csv
 import importlib.metadata
 from collections import Counter
 from collections.abc import Callable
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field, fields, replace
 from enum import StrEnum
+from pathlib import Path
 
 from cit.contract import Contract
 
@@ -289,6 +294,27 @@ class Report:
         return {
             group_key: sorted(groups[group_key], key=_sort_key) for group_key in sorted(groups)
         }
+
+    def write_csv(self, path: str | Path) -> None:
+        """Write every raw finding to ``path`` as CSV, one row per occurrence.
+
+        Unlike ``__str__`` (deduplicated for readability) or :meth:`deduplicated`, this is the
+        un-deduplicated escape hatch for triage: every ``results_file`` a finding was seen in
+        gets its own row, so the odd file out is recoverable in a spreadsheet. Uses only the
+        stdlib ``csv`` module -- pandas/rich/tabulate are not runtime dependencies of CIT.
+
+        Args:
+            path: Where to write the CSV file.
+        """
+        fieldnames = [f.name for f in fields(Finding)]
+        rows = sorted(self._findings, key=_sort_key)
+        with Path(path).open("w", newline="", encoding="utf-8") as csv_file:
+            writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+            writer.writeheader()
+            for finding in rows:
+                writer.writerow(
+                    {name: str(getattr(finding, name)) for name in fieldnames}
+                )
 
     def __str__(self) -> str:
         """Render the banner, legend, counts line, and component-grouped findings.
