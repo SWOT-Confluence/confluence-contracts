@@ -1,6 +1,6 @@
 """Read model for an actual produced file (the ACTUAL side).
 
-Where :mod:`cit.models` describes what a contract *expects*, this module exposes what a file
+Where :mod:`cit.contract` describes what a contract *expects*, this module exposes what a file
 *actually* contains, in a uniform shape the validators and the contract parser compare against.
 The hierarchy is organized by file *format*. Only netCDF result files are read, via
 :class:`NetcdfResult`. The workflow's JSON files (reach/set/basin/continent manifests) are

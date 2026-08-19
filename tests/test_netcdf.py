@@ -22,7 +22,7 @@ import netCDF4 as nc
 import numpy as np
 import pytest
 
-from cit.models import DataType
+from cit.contract import DataType
 from cit.netcdf import Netcdf, numpy_to_token
 
 

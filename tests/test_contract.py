@@ -1,4 +1,4 @@
-"""Tests for the Pydantic v2 contract models (cit.models).
+"""Tests for the Pydantic v2 contract models (cit.contract).
 
 These are a TDD spec for issue P1-2. They cover two of the issue's acceptance criteria:
 
@@ -18,7 +18,7 @@ import yaml
 from conftest import build_valid_contract
 from pydantic import ValidationError
 
-from cit.models import Contract, VariableAttrs
+from cit.contract import Contract, VariableAttrs
 
 
 def test_minimal_valid_contract_validates(valid_contract):

@@ -13,11 +13,11 @@ land in later issues, so for now they stream but produce no findings.
 import functools
 from collections.abc import Iterable, Iterator
 
+from cit.contract import Contract, Produces
 from cit.data import find_contract_files, find_result_files, find_rules_files, load_yaml
-from cit.models import Contract, Produces
 from cit.report import Finding, Report
 from cit.result import NetcdfResult
-from cit.rules import Rule
+from cit.rules import MetadataRules
 from cit.validation import Validator, ValidatorContext
 
 
@@ -44,10 +44,12 @@ class Orchestrate:
         return contracts
 
     @functools.cached_property
-    def rules(self) -> list[Rule]:
+    def rules(self) -> dict[str, MetadataRules]:
         """The SoS metadata rules -- stubbed (empty) until ``RulesValidation`` lands in P1-15."""
-        rules_files = find_rules_files()  # noqa: F841  (stub: rules parsing arrives in P1-15)
-        rules = [Rule()]
+        rules: dict[str, MetadataRules] = {}
+        for rules_file in find_rules_files():
+            metadata_rules = MetadataRules.model_validate(load_yaml(rules_file))
+            rules[metadata_rules.module_name] = metadata_rules
         return rules
 
     def iter_results(self, module: str) -> Iterator[tuple[Produces, NetcdfResult]]:
@@ -79,9 +81,10 @@ class Orchestrate:
             The findings for this module (empty until the validators land in P1-6/P1-15).
         """
         findings: list[Finding] = []
+        rules = self.rules.get(module)  # None when this module has no rules artifact
         for produces, result in self.iter_results(module):
             with result:
-                ctx = ValidatorContext(module, produces, self.rules, result)
+                ctx = ValidatorContext(module, produces, rules, result, strict)
                 for validator in self._validators:
                     findings.extend(validator.validate(ctx))
         return findings
@@ -99,3 +102,12 @@ class Orchestrate:
         modules = modules or self.contracts.keys()
         findings = [finding for module in modules for finding in self.validate(module, strict)]
         return Report(findings)
+
+
+if __name__ == "__main__":
+    mount = "/Users/ntebaldi/Documents/workspace/confluence/data/runs/end_to_end_mnt"
+    orchestrate = Orchestrate(mount)
+    # for result in orchestrate.iter_results("momma"):
+    #    print(result.variables)
+    #    print()
+    orchestrate.run()

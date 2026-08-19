@@ -22,7 +22,7 @@ contract from a result file. The code is a flat `src/cit/` package; per-module v
 Key locations:
 
 - `src/cit/` — the `cit` package (flat, one module per concern):
-  - `models.py` / `schema.py` — EXPECTED contract models (Pydantic v2) + JSON Schema generation
+  - `contract.py` / `schema.py` — EXPECTED contract models (Pydantic v2) + JSON Schema generation
   - `netcdf.py` / `result.py` — low-level NetCDF reader + ACTUAL file read model
   - `data.py` — I/O layer (the only component that touches disk)
   - `validation.py` — structural validator + report-only health checks + cross-check
@@ -128,7 +128,7 @@ New tests for new functionality should be added under `tests/` and must pass bef
 - **No speculative abstractions**: don't build for hypothetical future needs
 - **Docstrings and type annotations**: required on new public modules, functions, and classes (ruff enforces Google-style docstrings and annotations; line-length 100)
 - **Dependencies**: add runtime deps to `[project.dependencies]` and dev/test tooling to the `[dependency-groups] test` group in `pyproject.toml` — not inline installs
-- **Generated-artifact integrity**: do not hand-edit `schema/contract.schema.json` or `src/cit/resources/rules/sos_results_rules.yml` — they are generated, committed, and drift-checked. Change the source (`models.py` / the SoS spreadsheet + `tools/rules_convert.py`) and regenerate, unless the task explicitly says otherwise.
+- **Generated-artifact integrity**: do not hand-edit `schema/contract.schema.json` or `src/cit/resources/rules/sos_results_rules.yml` — they are generated, committed, and drift-checked. Change the source (`contract.py` / the SoS spreadsheet + `tools/rules_convert.py`) and regenerate, unless the task explicitly says otherwise.
 - **Contracts are the interface source of truth**: don't change a `contracts/*.yml` declared variable/dtype/shape/metadata unless the task calls for it.
 
 ## PR Format

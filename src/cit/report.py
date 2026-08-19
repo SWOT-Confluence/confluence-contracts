@@ -80,6 +80,7 @@ class Finding:
     module_name: str
     component: str
     filepath: str
+    validation: str
     message: str = ""
 
 
@@ -93,3 +94,4 @@ class Report:
             findings: The check outcomes collected across a validation run.
         """
         self._findings = findings
+        # for finding in findings: print(finding)

@@ -30,7 +30,7 @@ Orientation:
 - Dimension *sizes* vary per run (`nt` is a reach's timestep count). Dimension *names and order*
   are the interface.
 
-Terms map directly onto the code: EXPECTED = the contract (`models.py`), ACTUAL = the produced
+Terms map directly onto the code: EXPECTED = the contract (`contract.py`), ACTUAL = the produced
 file (`result.py`), and a `Finding` (`report.py`) is one disagreement between them.
 
 ## Authoring a contract
@@ -70,10 +70,10 @@ These are generated, committed, and drift-checked in CI. Change the source and r
 
 | Artifact | Source | Regenerate with |
 |---|---|---|
-| `schema/contract.schema.json` | `src/cit/models.py` | `uv run python -m cit.schema` |
+| `schema/contract.schema.json` | `src/cit/contract.py` | `uv run python -m cit.schema` |
 | `src/cit/resources/rules/sos_results_rules.yml` | the SoS metadata spreadsheet in the parent `confluence` repo (`docs/sos-dataset/`) | `tools/rules_convert.py` (openpyxl, dev-time only) |
 
-Any change to `models.py` requires regenerating the schema in the same commit, or CI's drift check
+Any change to `contract.py` requires regenerating the schema in the same commit, or CI's drift check
 fails. Verify with `uv run python -c "from cit.schema import check_drift; print(check_drift())"`.
 
 All bundled data lives under the `src/cit/resources/` subpackage and is loaded via

@@ -32,8 +32,17 @@ and the PR descriptions.
   `src/cit/resources/rules/sos_results_rules.yml` from `docs/sos-dataset/sos metadata.xlsx`;
   the committed artifact holds 32 required global attributes, 14 module groups with per-variable
   SoS metadata (long_name, units, valid_min/max, coverage_content_type), and the 4 canonical
-  fill-value types; drift-guarded by `tests/test_rules_artifact.py`
+  fill-value types, and declares the `module_name` and `filepath` it governs so several artifacts
+  can be loaded and matched to the produced file each applies to; drift-guarded by
+  `tests/test_rules_artifact.py`
   ([#8](https://github.com/SWOT-Confluence/confluence-contracts/issues/8)).
+- **SoS metadata-rules validator:** `RulesValidator` lints a produced file's metadata against the
+  rules artifact — required global attributes, the mandatory per-variable set (`long_name`,
+  `units`, `coverage_content_type`), agreement with the spreadsheet's expected values,
+  `valid_min <= valid_max`, and the canonical fill value for the dtype — with `--strict`
+  escalating violations to failures, and ships the first bundled contract for the aggregated
+  SoS results file (`contracts/output.yml`, 212 variables across 28 groups)
+  ([#9](https://github.com/SWOT-Confluence/confluence-contracts/issues/9)).
 
 ### Changed
 

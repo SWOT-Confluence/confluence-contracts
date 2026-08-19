@@ -4,6 +4,12 @@ These models are the in-memory representation of a ``contracts/<module>.yml`` fi
 the declared interface a Confluence module promises to produce. They are the source
 of truth from which the committed JSON Schema is derived (see :mod:`cit.schema`).
 
+This module holds the **contract** models only; the models describing the generated SoS
+metadata-rules artifact live in :mod:`cit.rules`. The two are kept apart because they
+answer different questions and carry different tolerances -- a contract is hand-reviewed
+and strictly typed, while a rules artifact is machine-generated from a spreadsheet and
+must tolerate sparse and irregular values.
+
 Classes:
 
 - ``Contract`` -- top-level document: module, confluence version, and source provenance.
