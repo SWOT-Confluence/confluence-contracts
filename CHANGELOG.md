@@ -43,6 +43,14 @@ and the PR descriptions.
   escalating violations to failures, and ships the first bundled contract for the aggregated
   SoS results file (`contracts/output.yml`, 212 variables across 28 groups)
   ([#9](https://github.com/SWOT-Confluence/confluence-contracts/issues/9)).
+- **Findings report & the working `cit validate`:** `Report` aggregates `Finding`s across a
+  run — deduplicating by content, grouping component-first (module → produced file →
+  component, components ranked by worst severity) with a version banner and summary counts —
+  plus `Report.write_csv` for one row per raw occurrence. The `cit validate` subcommand wires
+  this into the CLI end to end (`[--module M ...] [--results MOUNT] [--strict] [--show-passed]
+  [--report PATH] [--csv PATH]`), exiting 1 iff any finding is a FAIL, and adds a new
+  report-only `FindingStatus.REPORT` reserved for future health checks
+  ([#10](https://github.com/SWOT-Confluence/confluence-contracts/issues/10)).
 
 ### Changed
 
