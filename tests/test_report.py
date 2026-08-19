@@ -2,14 +2,16 @@
 
 Covers the P1-9.1 additions to ``Finding`` -- ``results_file`` (the resolved produced file,
 defaulted so existing callers keep working) and ``check`` (what kind of thing was examined,
-required so every finding names it rather than silently defaulting to an empty string) -- and the
-P1-9.2 ``Report``: deduplication, grouping, and the exit-code policy.
+required so every finding names it rather than silently defaulting to an empty string) -- the
+P1-9.2 ``Report``: deduplication, grouping, and the exit-code policy -- and the P1-9.3
+``Report.__str__`` rendering: banner, legend, counts line, and component-first grouping.
 """
 
 from dataclasses import replace
 
 import pytest
 
+from cit.contract import Contract
 from cit.report import Finding, FindingStatus, FindingType, Report
 
 _BASE = {
@@ -162,3 +164,142 @@ def test_report_findings_returns_every_raw_occurrence():
     report = Report([seen_in_a, seen_in_b])
 
     assert report.findings == [seen_in_a, seen_in_b]
+
+
+# --- P1-9.3: Report.__str__ rendering -------------------------------------------------------
+
+
+def test_str_includes_legend_and_counts_line():
+    """print(report) shows the legend (both nouns) and a load-bearing counts line."""
+    fail = _finding(type=FindingType.DIFFERENT, status=FindingStatus.FAIL, component="Qout")
+    warn = _finding(type=FindingType.EXTRA, status=FindingStatus.WARN, component="extra_var")
+    passed = _finding(status=FindingStatus.INFO, component="Qout")
+
+    text = str(Report([fail, warn, passed]))
+
+    assert "Declared = what the contract" in text
+    assert "Found    = what the produced file actually holds." in text
+    assert "MISSING" in text and "EXTRA" in text and "DIFFERENT" in text and "PASSED" in text
+    assert "FAIL 1" in text
+    assert "WARN 1" in text
+    assert "PASS 1" in text
+
+
+def test_str_banner_degrades_without_contracts():
+    """With no contracts supplied, the banner still renders -- just with no version segment."""
+    text = str(Report([_finding()]))
+
+    assert text.splitlines()[0].startswith("cit ")
+
+
+def test_str_banner_shows_module_version_branch_commit(valid_contract):
+    """The banner names each supplied contract's version, branch, and commit."""
+    contract = Contract.model_validate(valid_contract)
+
+    text = str(Report([_finding()], {"momma": contract}))
+
+    banner = text.splitlines()[0]
+    assert "momma" in banner
+    assert contract.version in banner
+    assert contract.source.branch in banner
+    assert contract.source.commit in banner
+
+
+def test_str_groups_module_then_filepath_then_component():
+    """Findings render nested: module heading, then its filepath, then its components."""
+    momma = _finding(module_name="momma", filepath="flpe/momma/{reach_id}_momma.nc")
+    output = _finding(
+        module_name="output",
+        filepath="output/sos/{continent_id}_SOS_results.nc",
+        status=FindingStatus.FAIL,
+        type=FindingType.DIFFERENT,
+    )
+
+    text = str(Report([momma, output], show_passed=True))
+    lines = text.splitlines()
+
+    momma_idx = lines.index("momma")
+    output_idx = lines.index("output")
+    assert lines[momma_idx + 1].strip() == "flpe/momma/{reach_id}_momma.nc"
+    assert lines[output_idx + 1].strip() == "output/sos/{continent_id}_SOS_results.nc"
+
+
+def test_nt_case_shows_passed_and_non_passed_lines_for_one_component():
+    """A component with mixed PASSED/non-PASSED findings shows both lines together.
+
+    This is the momma 'nt' case: a PASSED dimension finding and a non-PASSED variable finding
+    share a component name, and both render by default -- no --show-passed needed.
+    """
+    as_dimension = _finding(component="nt", check="dimension")
+    as_variable = _finding(
+        component="nt", check="variable", type=FindingType.EXTRA, status=FindingStatus.WARN
+    )
+
+    text = str(Report([as_dimension, as_variable]))
+
+    nt_idx = text.splitlines().index("    nt")
+    component_lines = text.splitlines()[nt_idx + 1 : nt_idx + 3]
+    assert any("dimension" in line and "PASSED" in line for line in component_lines)
+    assert any("variable" in line and "EXTRA" in line for line in component_lines)
+
+
+def test_all_passed_component_hidden_by_default():
+    """A component whose only finding is PASSED does not appear unless show_passed is set."""
+    passed = _finding(component="stage")
+
+    default_text = str(Report([passed]))
+    shown_text = str(Report([passed], show_passed=True))
+
+    assert "stage" not in default_text
+    assert "stage" in shown_text
+
+
+def test_components_sorted_by_worst_severity_then_name():
+    """A FAIL-bearing component precedes a WARN-only component, alphabetical name breaks ties."""
+    warn_component = _finding(
+        component="zzz_extra", type=FindingType.EXTRA, status=FindingStatus.WARN
+    )
+    fail_component = _finding(
+        component="Qout", type=FindingType.DIFFERENT, status=FindingStatus.FAIL
+    )
+
+    text = str(Report([warn_component, fail_component]))
+    lines = text.splitlines()
+
+    assert lines.index("    Qout") < lines.index("    zzz_extra")
+
+
+def test_finding_with_empty_filepath_and_no_results_file_does_not_raise():
+    """A registry-lint finding with nothing on disk (P1-17) renders without raising."""
+    orphan = _finding(
+        filepath="",
+        results_file="",
+        component="orphan_var",
+        type=FindingType.MISSING,
+        status=FindingStatus.FAIL,
+    )
+
+    text = str(Report([orphan]))
+
+    assert "orphan_var" in text
+
+
+def test_str_is_deterministic_across_runs():
+    """Rendering the same findings twice (in different orders) produces identical text."""
+    findings = [
+        _finding(module_name="sad", status=FindingStatus.WARN, type=FindingType.EXTRA),
+        _finding(module_name="momma", status=FindingStatus.FAIL, type=FindingType.DIFFERENT),
+        _finding(module_name="hivdi", status=FindingStatus.INFO),
+    ]
+
+    first = str(Report(findings))
+    second = str(Report(list(reversed(findings))))
+
+    assert first == second
+
+
+def test_show_passed_does_not_affect_exit_code():
+    """show_passed only changes what __str__ renders, never the pass/fail policy."""
+    fail = _finding(type=FindingType.DIFFERENT, status=FindingStatus.FAIL)
+
+    assert Report([fail], show_passed=True).exit_code == Report([fail]).exit_code == 1

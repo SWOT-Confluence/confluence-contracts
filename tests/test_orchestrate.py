@@ -99,3 +99,22 @@ def test_iter_results_is_lazy(orch):
         assert result._nc._fp is not None
 
     assert results[0]._nc._fp is None  # closed on context exit
+
+
+def test_run_report_carries_contracts_into_the_banner(orch):
+    """run() passes its loaded contracts into Report, so the rendered banner names momma."""
+    report = orch.run()
+
+    text = str(report)
+    assert "momma" in text.splitlines()[0]
+    assert "16.0" in text.splitlines()[0]
+
+
+def test_run_forwards_show_passed_to_report(orch):
+    """run(show_passed=True) is forwarded to Report so all-PASSED components render."""
+    default_report = orch.run()
+    shown_report = orch.run(show_passed=True)
+
+    # stage is the only variable declared, and every reach file matches it exactly -> PASSED.
+    assert "stage" not in str(default_report)
+    assert "stage" in str(shown_report)

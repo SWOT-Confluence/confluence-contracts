@@ -8,24 +8,64 @@ and "an actual file" are never confused.
 ``FindingStatus`` (how it bears on the exit code), so severity can be re-weighted -- e.g. by
 ``--strict`` -- without changing what a validator reports.
 
-``Report`` has also landed (P1-9.2): it aggregates findings, deduplicates them for display (see
-:meth:`Report.deduplicated`), groups them along an arbitrary axis (see :meth:`Report.grouped_by`),
-and applies the exit policy (see :attr:`Report.exit_code`) -- any ``FAIL`` fails the run, a
-``WARN``-only or empty run passes, and ``REPORT`` findings never affect the exit code, even under
-``--strict``.
+``Report`` aggregates findings, deduplicates them for display (see :meth:`Report.deduplicated`),
+groups them along an arbitrary axis (see :meth:`Report.grouped_by`), and applies the exit policy
+(see :attr:`Report.exit_code`) -- any ``FAIL`` fails the run, a ``WARN``-only or empty run
+passes, and ``REPORT`` findings never affect the exit code, even under ``--strict``.
+
+``Report.__str__`` (P1-9.3) renders that aggregation as text: a version banner, a legend, the
+summary counts line, and the findings themselves grouped **component-first** -- module, then
+produced-file template, then component, with each component's findings ordered FAIL -> WARN ->
+PASS. Grouping is component-first rather than severity-first (superseding the original plan) so
+that one variable's disagreeing and agreeing checks land together instead of scattered across
+severity sections -- see GitHub issue #10's first comment. Components are sorted by their worst
+severity, so a FAIL-bearing component still sorts before a WARN-only one; by default a component
+is shown only if at least one of its findings is not PASSED, and then *all* of its findings
+(including the PASSED ones) render together -- that adjacency is the point of the change.
+``show_passed`` additionally reveals components whose findings are all PASSED.
 
 Planned (P1-9, remaining):
 
-- Rendering (9.3): a version banner (confluence version + branch/commit) and a run-report
-  section, replacing today's bare aggregation with an actual ``Report.__str__``.
 - CSV export (9.4) of every raw finding.
 - CLI wiring (9.5): ``cit validate``/``cit parse`` and the locked ``print(report);
   sys.exit(report.exit_code)`` shape.
 """
 
+import importlib.metadata
+from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
+
+from cit.contract import Contract
+
+_DISTRIBUTION_NAME = "confluence-contracts"
+
+_LEGEND = """\
+Declared = what the contract (structure) or the SoS rules (metadata) say should be there.
+Found    = what the produced file actually holds.
+
+PASSED     Declared and found, contract/rules match module file.
+MISSING    Declared, but not found in the file. Data is missing from the module file.
+EXTRA      Found in the file, but not declared. Extra data located in the module file.
+DIFFERENT  Declared and found, contract/rules do not match module file. Message indicates
+           values for both."""
+
+_CHECK_WIDTH = len("global_attribute")
+_TYPE_WIDTH = len("DIFFERENT")
+
+
+def _cit_version() -> str:
+    """Return the installed ``cit`` version, or a placeholder outside an installed package.
+
+    Returns:
+        The ``confluence-contracts`` distribution version, or ``"0+unknown"`` if package
+        metadata cannot be found (e.g. running from a source checkout with no install record).
+    """
+    try:
+        return importlib.metadata.version(_DISTRIBUTION_NAME)
+    except importlib.metadata.PackageNotFoundError:
+        return "0+unknown"
 
 
 class FindingType(StrEnum):
@@ -151,13 +191,31 @@ class DedupedFinding:
 class Report:
     """Aggregate findings, dedupe/group them for display, and apply the run's exit policy."""
 
-    def __init__(self, findings: list[Finding]) -> None:
-        """Store the findings to aggregate.
+    def __init__(
+        self,
+        findings: list[Finding],
+        contracts: dict[str, Contract] | None = None,
+        *,
+        show_passed: bool = False,
+    ) -> None:
+        """Store the findings to aggregate, plus what ``__str__`` needs to render them.
+
+        ``contracts`` and ``show_passed`` are both optional so existing ``Report(findings)``
+        callers (including every test written before P1-9.3) keep working unchanged; without
+        them ``__str__`` still renders, just with a degraded banner and PASSED-only components
+        hidden.
 
         Args:
             findings: The check outcomes collected across a validation run.
+            contracts: The contracts loaded for this run, keyed by module name (e.g.
+                ``Orchestrate.contracts``), used to print each module's version/branch/commit in
+                the banner. ``None`` renders a banner with no per-module version data.
+            show_passed: When True, ``__str__`` also renders components whose findings are all
+                PASSED, not just the ones with at least one non-PASSED finding.
         """
         self._findings = findings
+        self._contracts = contracts or {}
+        self._show_passed = show_passed
 
     @property
     def findings(self) -> list[Finding]:
@@ -231,3 +289,158 @@ class Report:
         return {
             group_key: sorted(groups[group_key], key=_sort_key) for group_key in sorted(groups)
         }
+
+    def __str__(self) -> str:
+        """Render the banner, legend, counts line, and component-grouped findings.
+
+        The locked API is ``print(report)``, so rendering lives on ``__str__`` rather than a
+        separate ``render()`` method; anything that varies rendering (``show_passed``) is
+        therefore a constructor argument instead of a call-time one.
+
+        Returns:
+            The full report text, deterministic for a given set of findings/contracts/
+            ``show_passed`` -- byte-identical across runs on the same inputs.
+        """
+        sections = [
+            self._banner(),
+            "",
+            _LEGEND,
+            "",
+            self._counts_line(),
+            "",
+        ]
+        body = self._render_findings()
+        sections.append(body if body else "(no findings)")
+        return "\n".join(sections)
+
+    def _banner(self) -> str:
+        """Build the one-line banner: cit's version, then each module's version/branch/commit.
+
+        Returns:
+            ``cit <version>`` alone when no contracts were supplied, otherwise that plus one
+            ``<module> <version> @ <branch> <commit>`` segment per module, sorted by name,
+            joined with a middle-dot separator.
+        """
+        segments = [f"cit {_cit_version()}"]
+        for module_name in sorted(self._contracts):
+            contract = self._contracts[module_name]
+            segments.append(
+                f"{module_name}  {contract.version} @ "
+                f"{contract.source.branch} {contract.source.commit}"
+            )
+        return "  ·  ".join(segments)
+
+    def _counts_line(self) -> str:
+        """Build the summary counts line: the only at-a-glance severity total in the report.
+
+        Counts are taken from the deduplicated findings (what the reader actually sees), while
+        the file/module tallies are taken from the raw findings (what actually ran).
+
+        Returns:
+            E.g. ``FAIL 58   WARN 428   PASS 632   1118 findings over 25 files, 2 modules``.
+        """
+        deduped = self.deduplicated()
+        counts = Counter(entry.finding.status for entry in deduped)
+        parts = [
+            f"FAIL {counts.get(FindingStatus.FAIL, 0)}",
+            f"WARN {counts.get(FindingStatus.WARN, 0)}",
+            f"PASS {counts.get(FindingStatus.INFO, 0)}",
+        ]
+        if counts.get(FindingStatus.REPORT, 0):
+            parts.append(f"REPORT {counts[FindingStatus.REPORT]}")
+
+        files = {finding.results_file for finding in self._findings if finding.results_file}
+        modules = {finding.module_name for finding in self._findings}
+        return (
+            "   ".join(parts)
+            + f"   {len(deduped)} findings over {len(files)} files, {len(modules)} modules"
+        )
+
+    def _render_findings(self) -> str:
+        """Render the findings, grouped module -> produced-file template -> component.
+
+        Deduplicated entries are used throughout, so each rendered line stands for however many
+        raw occurrences it collapsed (see :meth:`deduplicated`). Components are ranked by their
+        worst severity so a FAIL-bearing component sorts before a WARN-only one, then by name;
+        by default only components with at least one non-PASSED finding are shown, but every
+        finding for a shown component (PASSED included) renders together.
+
+        Returns:
+            The rendered findings, or ``""`` if there is nothing to show.
+        """
+        deduped = self.deduplicated()
+        if not deduped:
+            return ""
+
+        by_finding = {entry.finding: entry for entry in deduped}
+        representatives = [entry.finding for entry in deduped]
+        # Reuse grouped_by (not a bespoke method per axis) by wrapping each axis's slice in a
+        # throwaway Report -- grouping logic lives in exactly one place regardless of how many
+        # axes rendering nests through.
+        module_groups = Report(representatives).grouped_by(lambda finding: finding.module_name)
+
+        lines: list[str] = []
+        for module_name, module_findings in module_groups.items():
+            lines.append(module_name)
+            file_groups = Report(module_findings).grouped_by(lambda finding: finding.filepath)
+            for filepath, file_findings in file_groups.items():
+                lines.append(f"  {filepath}")
+                lines.extend(self._render_components(file_findings, by_finding))
+        return "\n".join(lines)
+
+    def _render_components(
+        self, findings: list[Finding], by_finding: dict[Finding, DedupedFinding]
+    ) -> list[str]:
+        """Render one produced file's components, ordered by worst severity then name.
+
+        Args:
+            findings: The deduplicated, representative findings for one module/filepath group.
+            by_finding: Maps a representative finding back to its :class:`DedupedFinding` (for
+                the occurrence count and file list a plain ``Finding`` no longer carries).
+
+        Returns:
+            One heading line plus one (or two, if there is a message) lines per finding, for
+            every component that is shown -- skipping PASSED-only components unless
+            ``show_passed`` was set.
+        """
+        component_groups = Report(findings).grouped_by(lambda finding: finding.component)
+        ordered = sorted(
+            component_groups.items(),
+            key=lambda item: (min(_SEVERITY[f.status] for f in item[1]), item[0]),
+        )
+
+        lines: list[str] = []
+        for component, component_findings in ordered:
+            all_passed = all(f.type == FindingType.PASSED for f in component_findings)
+            if all_passed and not self._show_passed:
+                continue
+            lines.append(f"    {component}")
+            for finding in component_findings:
+                entry = by_finding[finding]
+                line = (
+                    f"      {finding.check:<{_CHECK_WIDTH}} {finding.type:<{_TYPE_WIDTH}} "
+                    f"{_files_suffix(entry)}"
+                )
+                lines.append(line.rstrip())
+                if finding.message:
+                    lines.append(f"      {' ' * (_CHECK_WIDTH + _TYPE_WIDTH + 1)}{finding.message}")
+        return lines
+
+
+def _files_suffix(entry: DedupedFinding) -> str:
+    """Describe how many distinct results files a deduplicated finding was seen in.
+
+    Tolerates a finding with no file at all (e.g. P1-17's registry cross-check, which has
+    nothing on disk behind it): if every ``entry.files`` value is empty, no suffix is rendered.
+
+    Args:
+        entry: The deduplicated finding to describe.
+
+    Returns:
+        ``"x<n> file(s)"`` for the distinct non-empty ``results_file`` values seen, or ``""``.
+    """
+    real_files = [f for f in entry.files if f]
+    if not real_files:
+        return ""
+    noun = "file" if len(real_files) == 1 else "files"
+    return f"x{len(real_files)} {noun}"

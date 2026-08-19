@@ -5,9 +5,9 @@
 through :class:`cit.result.NetcdfResult` (ACTUAL side) lazily -- opening, checking, and closing one
 file at a time so peak memory stays at a single result regardless of how many were produced.
 
-The per-file comparison (``validate``) and the aggregate ``run`` are included for context; the
-validators they call (``ResultsValidation`` P1-6, ``RulesValidation`` P1-15) and ``Report`` (P1-8)
-land in later issues, so for now they stream but produce no findings.
+``run`` aggregates every module's findings into a single :class:`~cit.report.Report`, passing
+along :attr:`contracts` so the rendered report's banner can show each module's version, branch,
+and commit.
 """
 
 import functools
@@ -89,25 +89,26 @@ class Orchestrate:
                     findings.extend(validator.validate(ctx))
         return findings
 
-    def run(self, strict: bool = False, modules: Iterable[str] | None = None) -> Report:
+    def run(
+        self,
+        strict: bool = False,
+        modules: Iterable[str] | None = None,
+        *,
+        show_passed: bool = False,
+    ) -> Report:
         """Validate every module (or a given subset) and aggregate a single report.
 
         Args:
             strict: When True, rule violations fail the run.
             modules: Modules to validate; defaults to every loaded contract.
+            show_passed: When True, the rendered report also shows components whose findings
+                are all PASSED (see :class:`cit.report.Report`).
 
         Returns:
-            A :class:`Report` aggregating the findings across all validated modules.
+            A :class:`Report` aggregating the findings across all validated modules, carrying
+            :attr:`contracts` so its banner can show each module's version/branch/commit.
         """
-        modules = modules or self.contracts.keys()
+        modules = list(modules) if modules is not None else list(self.contracts.keys())
         findings = [finding for module in modules for finding in self.validate(module, strict)]
-        return Report(findings)
-
-
-if __name__ == "__main__":
-    mount = "/Users/ntebaldi/Documents/workspace/confluence/data/runs/end_to_end_mnt"
-    orchestrate = Orchestrate(mount)
-    # for result in orchestrate.iter_results("momma"):
-    #    print(result.variables)
-    #    print()
-    orchestrate.run()
+        contracts = {name: self.contracts[name] for name in modules}
+        return Report(findings, contracts, show_passed=show_passed)
