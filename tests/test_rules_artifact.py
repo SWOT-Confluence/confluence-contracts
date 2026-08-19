@@ -25,8 +25,14 @@ def rules() -> dict:
 
 
 def test_top_level_keys(rules: dict) -> None:
-    """Artifact has exactly the keys global_attributes, variable_attributes, fill_values."""
-    assert set(rules.keys()) == {"global_attributes", "variable_attributes", "fill_values"}
+    """Artifact declares its target (module_name, filepath) plus the three rule sections."""
+    assert set(rules.keys()) == {
+        "module_name",
+        "filepath",
+        "global_attributes",
+        "variable_attributes",
+        "fill_values",
+    }
 
 
 def test_global_attributes_count(rules: dict) -> None:

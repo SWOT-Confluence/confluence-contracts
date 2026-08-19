@@ -81,7 +81,7 @@ class Orchestrate:
             The findings for this module (empty until the validators land in P1-6/P1-15).
         """
         findings: list[Finding] = []
-        rules = self.rules.get(module)   # None when this module has no rules artifact
+        rules = self.rules.get(module)  # None when this module has no rules artifact
         for produces, result in self.iter_results(module):
             with result:
                 ctx = ValidatorContext(module, produces, rules, result, strict)
@@ -107,7 +107,7 @@ class Orchestrate:
 if __name__ == "__main__":
     mount = "/Users/ntebaldi/Documents/workspace/confluence/data/runs/end_to_end_mnt"
     orchestrate = Orchestrate(mount)
-    #for result in orchestrate.iter_results("momma"):
+    # for result in orchestrate.iter_results("momma"):
     #    print(result.variables)
     #    print()
     orchestrate.run()

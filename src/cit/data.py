@@ -133,6 +133,7 @@ def find_rules_files() -> list:
         key=lambda p: p.name,
     )
 
+
 def load_yaml(path: str | Path) -> dict:
     """Read a YAML file into a plain dict (low-level; no model validation).
 

@@ -39,9 +39,8 @@ from cit.contract import DataType
 class Netcdf:
     """Class to handle NetCDF I/O operations and data retrieval."""
 
-    # token -> numpy dtype (contract dtype string → what NetCDF/numpy uses). "str" (vlen
-    # NC_STRING) is reported by netCDF4 as the Python ``str`` type, so it is overridden below
-    # rather than left as ``np.dtype("str")`` (which is ``<U0`` and would break the round-trip).
+    # token -> numpy dtype. netCDF4 reports a vlen NC_STRING as the Python `str` type, so "str"
+    # is overridden below rather than left as np.dtype("str") -- that is <U0 and breaks the round-trip.
     TOKEN_TO_NUMPY = {token: np.dtype(token) for token in get_args(DataType)}
     TOKEN_TO_NUMPY["str"] = str
 
