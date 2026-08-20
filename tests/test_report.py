@@ -296,8 +296,8 @@ def test_str_groups_module_then_filepath_then_component():
     text = str(Report([momma, output], show_passed=True))
     lines = text.splitlines()
 
-    momma_idx = lines.index("momma")
-    output_idx = lines.index("output")
+    momma_idx = lines.index(f"{report._INDENT}momma")
+    output_idx = lines.index(f"{report._INDENT}output")
     assert lines[momma_idx + 1].strip() == "flpe/momma/{reach_id}_momma.nc"
     assert lines[output_idx + 1].strip() == "output/sos/{continent_id}_SOS_results.nc"
 
@@ -317,14 +317,14 @@ def test_nt_case_hides_the_passed_line_by_default_and_shows_it_with_show_passed(
     shown_text = str(Report([as_dimension, as_variable], show_passed=True))
 
     default_lines = default_text.splitlines()
-    nt_idx = default_lines.index(f"{report._INDENT * 2}nt")
+    nt_idx = default_lines.index(f"{report._INDENT * 3}nt")
     # nt_idx + 1 is the header row; the finding lines follow it.
     default_component_lines = default_lines[nt_idx + 2 : nt_idx + 4]
     assert not any("PASSED" in line for line in default_component_lines)
     assert any("variable" in line and "EXTRA" in line for line in default_component_lines)
 
     shown_lines = shown_text.splitlines()
-    shown_nt_idx = shown_lines.index(f"{report._INDENT * 2}nt")
+    shown_nt_idx = shown_lines.index(f"{report._INDENT * 3}nt")
     shown_component_lines = shown_lines[shown_nt_idx + 2 : shown_nt_idx + 4]
     assert any("dimension" in line and "PASSED" in line for line in shown_component_lines)
     assert any("variable" in line and "EXTRA" in line for line in shown_component_lines)
@@ -353,8 +353,8 @@ def test_components_sorted_by_worst_severity_then_name():
     text = str(Report([warn_component, fail_component]))
     lines = text.splitlines()
 
-    assert lines.index(f"{report._INDENT * 2}Qout") < lines.index(
-        f"{report._INDENT * 2}zzz_extra"
+    assert lines.index(f"{report._INDENT * 3}Qout") < lines.index(
+        f"{report._INDENT * 3}zzz_extra"
     )
 
 
@@ -375,7 +375,7 @@ def test_finding_with_empty_filepath_and_no_results_file_does_not_raise():
     assert "orphan_var" in shown_text
     # No file behind the finding at all: no suffix and no list, even with show_files=True.
     # component_idx + 1 is the header row (which itself says "files"); the finding row follows.
-    component_idx = text.splitlines().index(f"{report._INDENT * 2}orphan_var")
+    component_idx = text.splitlines().index(f"{report._INDENT * 3}orphan_var")
     assert "file" not in text.splitlines()[component_idx + 2]
 
 
@@ -420,7 +420,7 @@ def test_show_files_lists_both_basenames_one_per_line():
     text = str(Report([seen_in_a, seen_in_b], show_files=True))
     lines = text.splitlines()
 
-    expected_prefix = f"{report._INDENT * 3}{report._grid_continuation(report._GRID)}"
+    expected_prefix = f"{report._INDENT * 4}{report._grid_continuation(report._SECTION_GRID)}"
     assert f"{expected_prefix}a_momma.nc" in lines
     assert f"{expected_prefix}b_momma.nc" in lines
 
@@ -652,8 +652,13 @@ def test_write_csv_includes_every_scope_value(tmp_path: Path):
     }
 
 
-def test_structure_precedes_metadata_within_a_component_regardless_of_severity():
-    """Structure sorts before metadata within a component even when metadata is more severe."""
+def test_structure_section_precedes_metadata_section_regardless_of_severity():
+    """The structure section renders before the metadata section, even when metadata is FAIL.
+
+    Before the sections split, this was enforced by an in-component sort order; now it follows
+    from :class:`ValidationSource` declaration order, since the two findings land in separate
+    top-level sections rather than sharing one component's rows.
+    """
     metadata_fail = _finding(
         validation=ValidationSource.METADATA,
         scope="attribute",
@@ -673,8 +678,8 @@ def test_structure_precedes_metadata_within_a_component_regardless_of_severity()
 
     body = Report([metadata_fail, structure_warn])._render_findings()
 
-    structure_idx = body.index("structure")
-    metadata_idx = body.index("metadata")
+    structure_idx = body.index("Structure checks")
+    metadata_idx = body.index("Metadata checks")
     assert structure_idx < metadata_idx
 
 
@@ -685,7 +690,7 @@ def test_header_row_appears_once_per_shown_component():
 
     body = Report([finding_a, finding_b])._render_findings()
 
-    header = f"{report._INDENT * 3}{report._grid_header(report._GRID)}"
+    header = f"{report._INDENT * 4}{report._grid_header(report._SECTION_GRID)}"
     assert body.count(header) == 2
 
 
@@ -738,8 +743,8 @@ def test_global_attribute_block_renders_above_components_with_its_own_header():
     body = Report([global_attribute, component_finding])._render_findings()
     lines = body.splitlines()
 
-    global_heading_idx = lines.index(f"{report._INDENT * 2}global attributes")
-    stage_heading_idx = lines.index(f"{report._INDENT * 2}stage")
+    global_heading_idx = lines.index(f"{report._INDENT * 3}global attributes")
+    stage_heading_idx = lines.index(f"{report._INDENT * 3}stage")
     assert global_heading_idx < stage_heading_idx
     assert "attribute" in lines[global_heading_idx + 1]
     assert "title" in lines[global_heading_idx + 2]
@@ -772,7 +777,7 @@ def test_global_attribute_findings_do_not_render_as_a_component():
 
     body = Report([global_attribute])._render_findings()
 
-    assert f"{report._INDENT * 2}title" not in body.splitlines()
+    assert f"{report._INDENT * 3}title" not in body.splitlines()
 
 
 def test_skipped_report_finding_renders_and_keeps_its_component_visible():
@@ -822,7 +827,7 @@ def test_show_files_lines_align_under_the_global_attribute_block_files_column():
     text = str(Report(findings, show_files=True))
     lines = text.splitlines()
 
-    heading_idx = lines.index(f"{report._INDENT * 2}global attributes")
+    heading_idx = lines.index(f"{report._INDENT * 3}global attributes")
     header_line = lines[heading_idx + 1]
     files_header_start = header_line.index("files")
 
@@ -835,11 +840,48 @@ def test_show_files_lines_align_under_the_global_attribute_block_files_column():
     assert continuation_line[files_column_start:].startswith("0_momma.nc")
 
 
+def test_message_and_show_files_align_under_the_nested_attribute_grid():
+    """A nested attribute sub-block's message and --show-files lines land under its own grid.
+
+    The nested block renders one level deeper than its parent's header row (see
+    _render_component_block) -- the level a hardcoded indent shift is most likely to miss, since
+    the header, the row, the message offset and the continuation indent must all move together.
+    Computed from the row's own text rather than a hardcoded column position, so a future depth
+    change is caught here too rather than only eyeballed.
+    """
+    base = _finding(
+        component="nodes/time.calendar",
+        scope="attribute",
+        check=Check.ATTRS,
+        type=FindingType.EXTRA,
+        status=FindingStatus.WARN,
+        parent="nodes/time",
+        message="nested detail",
+    )
+    findings = [replace(base, results_file=f"{i}_momma.nc") for i in range(3)]
+
+    text = str(Report(findings, show_files=True))
+    lines = text.splitlines()
+
+    subheading_idx = lines.index(f"{report._INDENT * 4}.calendar")
+    row_line = lines[subheading_idx + 1]
+    check_start = row_line.index("attrs")  # the row's own 'check' column value
+
+    message_line = lines[subheading_idx + 2]
+    assert message_line[:check_start].strip() == ""
+    assert message_line[check_start:] == "nested detail"
+
+    files_column_start = row_line.index("x3 files")
+    continuation_line = lines[subheading_idx + 3]
+    assert continuation_line[:files_column_start].strip() == ""
+    assert continuation_line[files_column_start:].startswith("0_momma.nc")
+
+
 # --- message indent, per-line PASSED filtering, and attribute nesting ----------------------
 
 
-def test_message_renders_under_scope_in_the_component_grid():
-    """A finding's message lands under the grid's 'scope' column, not the files column."""
+def test_message_renders_under_check_in_the_component_grid():
+    """A finding's message lands under the section grid's 'check' column, not the files column."""
     finding = _finding(
         type=FindingType.DIFFERENT, status=FindingStatus.FAIL, message="mismatch detail"
     )
@@ -847,13 +889,13 @@ def test_message_renders_under_scope_in_the_component_grid():
     text = str(Report([finding]))
     lines = text.splitlines()
 
-    component_idx = lines.index(f"{report._INDENT * 2}stage")
+    component_idx = lines.index(f"{report._INDENT * 3}stage")
     header_line = lines[component_idx + 1]
-    scope_start = header_line.index("scope")
+    check_start = header_line.index("check")
 
     message_line = lines[component_idx + 3]
-    assert message_line[:scope_start].strip() == ""
-    assert message_line[scope_start:] == "mismatch detail"
+    assert message_line[:check_start].strip() == ""
+    assert message_line[check_start:] == "mismatch detail"
 
 
 def test_message_renders_under_found_in_the_global_attribute_block():
@@ -870,7 +912,7 @@ def test_message_renders_under_found_in_the_global_attribute_block():
     text = str(Report([finding]))
     lines = text.splitlines()
 
-    heading_idx = lines.index(f"{report._INDENT * 2}global attributes")
+    heading_idx = lines.index(f"{report._INDENT * 3}global attributes")
     header_line = lines[heading_idx + 1]
     found_start = header_line.index("found")
 
@@ -910,9 +952,9 @@ def test_attribute_findings_render_nested_under_their_variable_not_as_components
     body = Report([own, attribute])._render_findings()
     lines = body.splitlines()
 
-    assert f"{report._INDENT * 2}nodes/time" in lines
-    assert f"{report._INDENT * 2}nodes/time.calendar" not in lines
-    assert f"{report._INDENT * 3}.calendar" in lines
+    assert f"{report._INDENT * 3}nodes/time" in lines
+    assert f"{report._INDENT * 3}nodes/time.calendar" not in lines
+    assert f"{report._INDENT * 4}.calendar" in lines
 
 
 def test_bounds_case_renders_as_a_variable_level_row_not_a_sub_heading():
@@ -933,7 +975,7 @@ def test_bounds_case_renders_as_a_variable_level_row_not_a_sub_heading():
     body = Report([bounds])._render_findings()
     lines = body.splitlines()
 
-    assert f"{report._INDENT * 2}Qmean_momma.constrained" in lines
+    assert f"{report._INDENT * 3}Qmean_momma.constrained" in lines
     assert not any(line.strip().startswith(".") for line in lines)
     assert any("bounds" in line and "DIFFERENT" in line for line in lines)
 
@@ -952,8 +994,8 @@ def test_variable_with_no_own_findings_still_renders_heading_for_a_failing_attri
     body = Report([attribute])._render_findings()
     lines = body.splitlines()
 
-    assert f"{report._INDENT * 2}stage" in lines
-    assert f"{report._INDENT * 3}.units" in lines
+    assert f"{report._INDENT * 3}stage" in lines
+    assert f"{report._INDENT * 4}.units" in lines
 
 
 def test_variable_all_passed_including_attributes_renders_nothing():
@@ -989,8 +1031,8 @@ def test_variable_with_only_an_attribute_failure_outranks_a_warn_only_variable()
     body = Report([warn_only, fail_attribute])._render_findings()
     lines = body.splitlines()
 
-    assert lines.index(f"{report._INDENT * 2}zzz_has_fail_attr") < lines.index(
-        f"{report._INDENT * 2}aaa_warn_only"
+    assert lines.index(f"{report._INDENT * 3}zzz_has_fail_attr") < lines.index(
+        f"{report._INDENT * 3}aaa_warn_only"
     )
 
 
@@ -1018,3 +1060,161 @@ def test_str_is_deterministic_across_runs_with_nested_attributes():
     second = str(Report([valid_min, own, calendar]))
 
     assert first == second
+
+
+# --- #10 follow-up: the structure/metadata section split, the --checks filter -----------------
+
+
+def _metadata_finding(**overrides: object) -> Finding:
+    """Build a metadata-source Finding, otherwise identical to :func:`_finding`."""
+    return _finding(validation=ValidationSource.METADATA, **overrides)
+
+
+def test_both_sections_render_structure_first_with_headings():
+    """A run with both sources renders both headings, structure section before metadata."""
+    structure = _finding(component="stage", type=FindingType.EXTRA, status=FindingStatus.WARN)
+    metadata = _metadata_finding(
+        component="Name", scope="global_attribute", type=FindingType.MISSING,
+        status=FindingStatus.WARN,
+    )
+
+    body = Report([structure, metadata])._render_findings()
+
+    assert "Structure checks -- the module contract" in body
+    assert "Metadata checks -- the SoS rules" in body
+    assert body.index("Structure checks") < body.index("Metadata checks")
+
+
+def test_structure_only_findings_render_no_metadata_section():
+    """A run with only structure findings omits the metadata heading entirely."""
+    structure = _finding(component="stage", type=FindingType.EXTRA, status=FindingStatus.WARN)
+
+    body = Report([structure])._render_findings()
+
+    assert "Structure checks" in body
+    assert "Metadata checks" not in body
+
+
+def test_checks_structure_renders_only_the_structure_section():
+    """checks=ValidationSource.STRUCTURE hides the metadata section even when it has findings."""
+    structure = _finding(component="stage", type=FindingType.EXTRA, status=FindingStatus.WARN)
+    metadata = _metadata_finding(
+        component="Name", scope="global_attribute", type=FindingType.MISSING,
+        status=FindingStatus.WARN,
+    )
+
+    body = Report([structure, metadata], checks=ValidationSource.STRUCTURE)._render_findings()
+
+    assert "Structure checks" in body
+    assert "Metadata checks" not in body
+
+
+def test_checks_metadata_renders_only_the_metadata_section():
+    """checks=ValidationSource.METADATA hides the structure section even when it has findings."""
+    structure = _finding(component="stage", type=FindingType.EXTRA, status=FindingStatus.WARN)
+    metadata = _metadata_finding(
+        component="Name", scope="global_attribute", type=FindingType.MISSING,
+        status=FindingStatus.WARN,
+    )
+
+    body = Report([structure, metadata], checks=ValidationSource.METADATA)._render_findings()
+
+    assert "Metadata checks" in body
+    assert "Structure checks" not in body
+
+
+def test_checks_does_not_affect_exit_code_counts_or_csv(tmp_path: Path):
+    """--checks only filters what __str__ renders -- exit_code, counts and the CSV stay whole."""
+    structure_fail = _finding(
+        component="stage", type=FindingType.DIFFERENT, status=FindingStatus.FAIL
+    )
+    metadata_warn = _metadata_finding(
+        component="Name", scope="global_attribute", type=FindingType.MISSING,
+        status=FindingStatus.WARN,
+    )
+    findings = [structure_fail, metadata_warn]
+
+    whole = Report(findings)
+    filtered = Report(findings, checks=ValidationSource.STRUCTURE)
+
+    assert filtered.exit_code == whole.exit_code == 1
+    assert filtered._counts_line() == whole._counts_line()
+
+    whole_csv, filtered_csv = tmp_path / "whole.csv", tmp_path / "filtered.csv"
+    whole.write_csv(whole_csv)
+    filtered.write_csv(filtered_csv)
+    assert whole_csv.read_text() == filtered_csv.read_text()
+
+
+def test_global_attribute_block_renders_only_in_the_metadata_section():
+    """The global-attribute block is metadata-only, so it never appears in the structure section."""
+    global_attribute = _metadata_finding(
+        scope="global_attribute",
+        check=Check.EXISTS,
+        component="title",
+        type=FindingType.MISSING,
+        status=FindingStatus.WARN,
+    )
+    structure = _finding(component="stage", type=FindingType.EXTRA, status=FindingStatus.WARN)
+
+    body = Report([global_attribute, structure])._render_findings()
+    structure_idx = body.index("Structure checks")
+    metadata_idx = body.index("Metadata checks")
+
+    assert "global attributes" not in body[structure_idx:metadata_idx]
+    assert "global attributes" in body[metadata_idx:]
+
+
+def test_section_grid_drops_source_and_header_matches_the_rows_beneath_it():
+    """Inside a section, the component grid has no 'source' column, and rows match its header."""
+    finding = _finding(component="stage", type=FindingType.EXTRA, status=FindingStatus.WARN)
+
+    body = Report([finding])._render_findings()
+    lines = body.splitlines()
+
+    header = f"{report._INDENT * 4}{report._grid_header(report._SECTION_GRID)}"
+    header_idx = lines.index(header)
+    row = lines[header_idx + 1]
+
+    assert "source" not in header
+    assert header.split()[: len(report._SECTION_GRID)] == ["scope", "check", "found", "severity"]
+    assert "variable" in row and "exists" in row and "EXTRA" in row and "WARN" in row
+
+
+def test_legend_and_checks_block_are_byte_identical_to_before_the_split():
+    """Moving _LEGEND to the top band must not change a byte of the rendered legend text.
+
+    Captured verbatim from the report before the section split (when _LEGEND was a single
+    f-string ending in ``_checks_block()``), so a change to either constant's *text* -- not just
+    where it is assembled -- fails this test.
+    """
+    assembled = f"{report._LEGEND}\n\n{report._checks_block()}"
+
+    assert assembled == (
+        "Declared = what the contract (structure) or the SoS rules (metadata) say should be "
+        "there.\n"
+        "Found    = what the produced file actually holds.\n"
+        "\n"
+        "PASSED     Declared and found, contract/rules match module file.\n"
+        "MISSING    Declared, but not found in the file. Data is missing from the module file.\n"
+        "EXTRA      Found in the file, but not declared. Extra data located in the module file.\n"
+        "DIFFERENT  Declared and found, contract/rules do not match module file. Message "
+        "indicates\n"
+        "           values for both.\n"
+        "SKIPPED    CIT could not run this check -- a gap in the tool, not in the data.\n"
+        "\n"
+        "Checks -- the question each line asked.\n"
+        "\n"
+        "structure   compared against the module's contract (contracts/<module>.yml)\n"
+        "  exists      the dimension or variable is declared and present in the file\n"
+        "  dtype       the variable's data type matches the one declared\n"
+        "  dims        the variable's dimension names, and their order, match\n"
+        "  dtype+dims  both agreed -- reported once instead of two PASSED lines\n"
+        "\n"
+        "metadata    compared against the SoS rules (rules/sos_results_rules.yml)\n"
+        "  exists      the spec covers this variable, or requires this global attribute\n"
+        "  attrs       the variable carries the attribute names the spec declares for it\n"
+        "  required    long_name, units and coverage_content_type are present and non-blank\n"
+        "  bounds      valid_min is not greater than valid_max\n"
+        "  fill        the fill value is the canonical one for the variable's data type"
+    )

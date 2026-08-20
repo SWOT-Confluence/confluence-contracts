@@ -47,20 +47,23 @@ and the PR descriptions.
   aggregated SoS results file ships alongside as `contracts/output.yml`
   ([#9](https://github.com/SWOT-Confluence/confluence-contracts/issues/9)).
 - **Findings report and a working `cit validate`:** `cit validate --results <mount>` now checks a
-  run's files against their contracts and prints a report grouped by module, then produced file,
-  then component, collapsing a finding that recurs across many files into one line and exiting 1
-  if anything failed. Every line names its source (`structure` or `metadata`), scope, specific
-  check, verdict and severity across a six-column grid with a header row per component, ordered
-  structure before metadata so the two validators' takes on the same component never render
-  identically; global attributes render in their own compact block above a file's components; a
-  variable's attribute-level findings nest beneath it instead of rendering as separate
-  components; and the one check CIT cannot run at all (a fill value for an unmapped dtype) reports
-  as `SKIPPED`/`REPORT` instead of a data disagreement. A mismatch message sits under the grid's
-  `scope` column rather than the wider `files` column. `--show-passed` is a per-line rule -- a
-  PASSED line renders only when it is set, never merely because a sibling in the same component
-  did not pass -- `--show-files` names the files behind a finding (capped by `--max-files`), and
-  `--report` and `--csv` save the text report and a full one-row-per-occurrence export (the CSV
-  header now carries the report's `scope`, `check` and `parent` columns too)
+  run's files against their contracts and prints a report split into a structure section and a
+  metadata section (in that order), each grouped by module, then produced file, then component,
+  collapsing a finding that recurs across many files into one line and exiting 1 if anything
+  failed. A new `--checks structure|metadata|all` flag (default `all`) renders just one section
+  without changing the exit code, the counts line, or `--csv`, so a filtered view can never
+  disagree with the run's real outcome. Every line names its scope, specific check, verdict and
+  severity across a grid with a header row per component -- the source is no longer a column
+  since the section heading already says it; global attributes render in their own compact block
+  above a file's components (metadata-only, so it only ever appears in that section); a variable's
+  attribute-level findings nest beneath it instead of rendering as separate components; and the one
+  check CIT cannot run at all (a fill value for an unmapped dtype) reports as `SKIPPED`/`REPORT`
+  instead of a data disagreement. A mismatch message sits under the grid's `check` column rather
+  than the wider `files` column. `--show-passed` is a per-line rule -- a PASSED line renders only
+  when it is set, never merely because a sibling in the same component did not pass --
+  `--show-files` names the files behind a finding (capped by `--max-files`), and `--report` and
+  `--csv` save the text report and a full one-row-per-occurrence export (the CSV header now
+  carries the report's `scope`, `check` and `parent` columns too)
   ([#10](https://github.com/SWOT-Confluence/confluence-contracts/issues/10)).
 
 ### Changed

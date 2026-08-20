@@ -15,6 +15,7 @@ import pytest
 
 from cit.contract import Produces
 from cit.orchestrate import Orchestrate
+from cit.report import ValidationSource
 from cit.result import NetcdfResult
 
 CONTRACT_YAML = """\
@@ -118,3 +119,16 @@ def test_run_forwards_show_passed_to_report(orch):
     # stage is the only variable declared, and every reach file matches it exactly -> PASSED.
     assert "stage" not in str(default_report)
     assert "stage" in str(shown_report)
+
+
+def test_run_forwards_checks_to_report(orch):
+    """run(checks=...) is forwarded to Report, filtering which section renders.
+
+    This fixture has no rules artifact, so momma has only structure findings: filtering to
+    METADATA leaves the structure section's "stage" row out of the rendered text entirely.
+    """
+    structure_report = orch.run(show_passed=True, checks=ValidationSource.STRUCTURE)
+    metadata_report = orch.run(show_passed=True, checks=ValidationSource.METADATA)
+
+    assert "stage" in str(structure_report)
+    assert "stage" not in str(metadata_report)

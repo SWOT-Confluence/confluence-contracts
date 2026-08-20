@@ -76,6 +76,25 @@ def test_validate_new_flags_parse():
     assert args.csv == "findings.csv"
 
 
+def test_validate_checks_defaults_to_all():
+    """--checks defaults to 'all', so an unfiltered run needs no flag at all."""
+    args = build_parser().parse_args(["validate"])
+    assert args.checks == "all"
+
+
+@pytest.mark.parametrize("source", list(ValidationSource))
+def test_validate_checks_accepts_each_validation_source(source):
+    """--checks accepts every ValidationSource member's value, not a hand-maintained list."""
+    args = build_parser().parse_args(["validate", "--checks", source])
+    assert args.checks == source
+
+
+def test_validate_checks_rejects_an_invalid_value():
+    """An unrecognized --checks value is rejected by argparse, not accepted silently."""
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["validate", "--checks", "bogus"])
+
+
 def _make_two_file_stub(captured_kwargs):
     """Build a fake Orchestrate whose run() records its kwargs and returns a two-file report."""
     finding = Finding(
@@ -160,6 +179,32 @@ def test_max_files_set_to_default_value_still_enables_show_files(monkeypatch, ca
     assert captured_kwargs["max_files"] == DEFAULT_MAX_FILES
 
 
+def test_checks_value_reaches_orchestrate_run(monkeypatch):
+    """--checks structure reaches orchestrate.run as ValidationSource.STRUCTURE, not the raw str."""
+    captured_kwargs = {}
+    monkeypatch.setattr("cit.__main__.Orchestrate", _make_two_file_stub(captured_kwargs))
+    monkeypatch.setattr(
+        "sys.argv", ["cit", "validate", "--results", "/mnt/data", "--checks", "structure"]
+    )
+
+    with pytest.raises(SystemExit):
+        main()
+
+    assert captured_kwargs["checks"] is ValidationSource.STRUCTURE
+
+
+def test_checks_all_reaches_orchestrate_run_as_none(monkeypatch):
+    """The default --checks all reaches orchestrate.run as None (render every section)."""
+    captured_kwargs = {}
+    monkeypatch.setattr("cit.__main__.Orchestrate", _make_two_file_stub(captured_kwargs))
+    monkeypatch.setattr("sys.argv", ["cit", "validate", "--results", "/mnt/data"])
+
+    with pytest.raises(SystemExit):
+        main()
+
+    assert captured_kwargs["checks"] is None
+
+
 def test_max_files_below_one_exits_with_clear_message(capsys):
     """--max-files 0 exits with a clear message rather than a traceback."""
     args = build_parser().parse_args(
@@ -211,7 +256,14 @@ def test_main_exits_1_when_report_holds_a_fail(monkeypatch):
             self.data_mount = data_mount
 
         def run(
-            self, strict=False, modules=None, *, show_passed=False, show_files=False, max_files=5
+            self,
+            strict=False,
+            modules=None,
+            *,
+            show_passed=False,
+            show_files=False,
+            max_files=5,
+            checks=None,
         ):
             return report
 
@@ -243,7 +295,14 @@ def test_main_exits_0_when_report_has_no_fail(monkeypatch, capsys):
             self.data_mount = data_mount
 
         def run(
-            self, strict=False, modules=None, *, show_passed=False, show_files=False, max_files=5
+            self,
+            strict=False,
+            modules=None,
+            *,
+            show_passed=False,
+            show_files=False,
+            max_files=5,
+            checks=None,
         ):
             return report
 

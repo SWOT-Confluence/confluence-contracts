@@ -7,7 +7,9 @@ from pathlib import Path
 from typing import NoReturn
 
 from cit.orchestrate import Orchestrate
-from cit.report import DEFAULT_MAX_FILES
+from cit.report import DEFAULT_MAX_FILES, ValidationSource
+
+_CHECKS_ALL = "all"
 
 logger = logging.getLogger("cit")
 
@@ -38,6 +40,7 @@ def _validate(args: argparse.Namespace) -> int:
 
     show_files = args.show_files or args.max_files is not None
     max_files = DEFAULT_MAX_FILES if args.max_files is None else args.max_files
+    checks = None if args.checks == _CHECKS_ALL else ValidationSource(args.checks)
     orchestrate = Orchestrate(args.results)
     report = orchestrate.run(
         strict=args.strict,
@@ -45,6 +48,7 @@ def _validate(args: argparse.Namespace) -> int:
         show_passed=args.show_passed,
         show_files=show_files,
         max_files=max_files,
+        checks=checks,
     )
 
     text = str(report)
@@ -149,6 +153,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--strict",
         action="store_true",
         help="Treat SoS metadata-rule warnings as failures.",
+    )
+    validate.add_argument(
+        "--checks",
+        choices=[*list(ValidationSource), _CHECKS_ALL],
+        default=_CHECKS_ALL,
+        help=(
+            "Render only this section of the report (default: all). Rendering-only -- the exit "
+            "code, counts line, and --csv always reflect every check, regardless of --checks."
+        ),
     )
     validate.add_argument(
         "--show-passed",

@@ -215,11 +215,13 @@ def test_strict_flips_rule_warning_to_fail_exit_code(
 def test_structure_and_metadata_findings_reach_stdout_distinguishably(
     contract_file, rules_file, tmp_path, monkeypatch, capsys
 ):
-    """A structure finding and a metadata finding for the same run render as distinct lines.
+    """A structure finding and a metadata finding for the same run land in distinct sections.
 
     Before #10 a contract-side and a rule-side finding with the same shape (e.g. two
-    ``variable MISSING`` lines, one FAIL, one WARN) rendered byte-identical; this drives the
-    real CLI end to end and checks the two sources are visibly labelled.
+    ``variable MISSING`` lines, one FAIL, one WARN) rendered byte-identical. Now that the report
+    splits by source, this drives the real CLI end to end and checks the two sources are visibly
+    separated: a "Structure checks" section before a "Metadata checks" one, each with its own
+    WARN line.
     """
     result_dir = tmp_path / "mnt4" / "synth"
     result_dir.mkdir(parents=True)
@@ -235,9 +237,46 @@ def test_structure_and_metadata_findings_reach_stdout_distinguishably(
 
     assert exit_code == 0  # both findings are WARN-only
     text = capsys.readouterr().out
-    finding_lines = [line for line in text.splitlines() if "WARN" in line]
-    assert any("structure" in line for line in finding_lines)
-    assert any("metadata" in line for line in finding_lines)
+    structure_idx = text.index("Structure checks")
+    metadata_idx = text.index("Metadata checks")
+    assert structure_idx < metadata_idx
+    assert "WARN" in text[structure_idx:metadata_idx]
+    assert "WARN" in text[metadata_idx:]
+
+
+def test_checks_flag_renders_only_the_requested_section(
+    contract_file, rules_file, tmp_path, monkeypatch, capsys
+):
+    """--checks structure/metadata each render only their own section, end to end."""
+    result_dir = tmp_path / "mnt5" / "synth"
+    result_dir.mkdir(parents=True)
+    ds = nc.Dataset(result_dir / "11111111111_synth.nc", "w")
+    ds.createDimension("nt", 3)
+    ds.createVariable("stage", "f8", ("nt",))
+    ds.createVariable("extra_var", "f8", ("nt",))  # undeclared -> structure EXTRA/WARN
+    ds.close()
+
+    structure_exit = _run_cli(
+        monkeypatch,
+        contract_file,
+        tmp_path / "mnt5",
+        rules_files=[rules_file],
+        extra_args=["--checks", "structure"],
+    )
+    structure_text = capsys.readouterr().out
+
+    metadata_exit = _run_cli(
+        monkeypatch,
+        contract_file,
+        tmp_path / "mnt5",
+        rules_files=[rules_file],
+        extra_args=["--checks", "metadata"],
+    )
+    metadata_text = capsys.readouterr().out
+
+    assert structure_exit == metadata_exit == 0
+    assert "Structure checks" in structure_text and "Metadata checks" not in structure_text
+    assert "Metadata checks" in metadata_text and "Structure checks" not in metadata_text
 
 
 def test_show_passed_reveals_all_passed_components(contract_file, mount, monkeypatch, capsys):

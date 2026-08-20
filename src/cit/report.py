@@ -5,15 +5,19 @@ groups and renders them. A finding models five axes separately -- ``validation``
 ``check``, ``type`` and ``status`` -- rather than collapsing them into one overloaded ``check``
 string, so two checks that ask different questions can never render byte-identical.
 
-``Report.__str__`` groups findings **component-first** (module, then produced-file template,
-then component) rather than severity-first, so one variable's agreeing and disagreeing checks
-land together instead of scattered across severity sections. Components sort by worst severity;
-``show_passed`` is a **per-line** rule, so a PASSED finding renders only when it is set. Within a
-shown component, findings render structure before metadata, then by severity, and an
-attribute-scoped finding nests beneath its parent variable rather than rendering as a component
-of its own. Global attributes get their own compact block above a file's components, since only
-one kind of check ever applies to them. :meth:`Report.write_csv` exports every raw finding,
-undeduplicated, as the full per-file detail a text report collapses away.
+``Report.__str__`` splits the findings body into one top-level section per
+:class:`ValidationSource` (structure, then metadata), so a reader chasing contract breakage does
+not wade through metadata drift and vice versa; an empty section, or one ``checks`` excludes,
+renders nothing at all, heading included. Within a section, findings group **component-first**
+(module, then produced-file template, then component) rather than severity-first, so one
+variable's agreeing and disagreeing checks land together instead of scattered across severity
+sections. Components sort by worst severity; ``show_passed`` is a **per-line** rule, so a PASSED
+finding renders only when it is set, and an attribute-scoped finding nests beneath its parent
+variable rather than rendering as a component of its own. Global attributes get their own compact
+block above a file's components, since only one (metadata-only) kind of check ever applies to
+them, so that block now only ever appears in the metadata section. :meth:`Report.write_csv`
+exports every raw finding, undeduplicated, as the full per-file detail a text report collapses
+away.
 """
 
 import csv
@@ -38,6 +42,17 @@ DEFAULT_MAX_FILES = 5
 _MIN_FILES_TO_LIST = 2
 
 _INDENT = " " * 4
+
+_LEGEND = """\
+Declared = what the contract (structure) or the SoS rules (metadata) say should be there.
+Found    = what the produced file actually holds.
+
+PASSED     Declared and found, contract/rules match module file.
+MISSING    Declared, but not found in the file. Data is missing from the module file.
+EXTRA      Found in the file, but not declared. Extra data located in the module file.
+DIFFERENT  Declared and found, contract/rules do not match module file. Message indicates
+           values for both.
+SKIPPED    CIT could not run this check -- a gap in the tool, not in the data."""
 
 
 class FindingType(StrEnum):
@@ -137,7 +152,9 @@ _SEVERITY = {
 # Column widths: each the longer of its header word and its widest possible value. Two read an
 # enum member, so the block sits here rather than with the dependency-free constants above.
 _SOURCE_WIDTH = len("structure")
-_SCOPE_WIDTH = len("global_attribute")
+# "global_attribute" never reaches this grid -- it renders only in its own block (see
+# _render_global_attributes) -- so the widest scope value here is "dimension"/"attribute".
+_SCOPE_WIDTH = len("dimension")
 _CHECK_WIDTH = len(Check.DTYPE_DIMS)
 _FOUND_WIDTH = len(FindingType.DIFFERENT)
 _SEVERITY_WIDTH = len("severity")  # the header word "severity" outruns every status value
@@ -260,6 +277,18 @@ _GRID: tuple[_Column, ...] = (
     _Column("severity", _SEVERITY_WIDTH, lambda finding: finding.status),
 )
 
+# _GRID minus its "source" column: a section already names its source in the heading, so a
+# component row inside one need not repeat it. Derived rather than hand-written, so the two
+# specs cannot drift out of sync.
+_SECTION_GRID: tuple[_Column, ...] = tuple(column for column in _GRID if column.header != "source")
+
+# What each section heading says the source was compared against -- keyed by ValidationSource so
+# a third source cannot be named without also being added here.
+_SECTION_COMPARISON: dict[ValidationSource, str] = {
+    ValidationSource.STRUCTURE: "the module contract",
+    ValidationSource.METADATA: "the SoS rules",
+}
+
 
 class Report:
     """Aggregate findings, dedupe/group them for display, and apply the run's exit policy."""
@@ -272,6 +301,7 @@ class Report:
         show_passed: bool = False,
         show_files: bool = False,
         max_files: int = DEFAULT_MAX_FILES,
+        checks: ValidationSource | None = None,
     ) -> None:
         """Store the findings to aggregate, plus what ``__str__`` needs to render them.
 
@@ -287,12 +317,15 @@ class Report:
                 more than one file (a lone file is always named inline regardless of this flag).
             max_files: How many basenames to list per finding when ``show_files`` is set, before
                 truncating with a ``... and N more`` line.
+            checks: Render only this source's section, not both. Rendering-only: never changes
+                :attr:`exit_code`, the counts line, or :meth:`write_csv`.
         """
         self._findings = list(findings)
         self._contracts = contracts or {}
         self._show_passed = show_passed
         self._show_files = show_files
         self._max_files = max_files
+        self._checks = checks
 
     @property
     def findings(self) -> list[Finding]:
@@ -372,7 +405,7 @@ class Report:
                 )
 
     def __str__(self) -> str:
-        """Render the banner, legend, counts line, and component-grouped findings.
+        """Render the banner, legend, checks block, counts line, and section-grouped findings.
 
         The locked API is ``print(report)``, so rendering lives on ``__str__`` rather than a
         separate ``render()`` method; anything that varies rendering is therefore a constructor
@@ -382,6 +415,8 @@ class Report:
             self._banner(),
             "",
             _LEGEND,
+            "",
+            _checks_block(),
             "",
             self._counts_line(),
             "",
@@ -441,22 +476,51 @@ class Report:
         )
 
     def _render_findings(self) -> str:
-        """Render the findings, grouped module -> produced-file template -> component.
+        """Render one section per :class:`ValidationSource` present, structure then metadata.
 
-        Deduplicated throughout, so each line stands for however many raw occurrences it
-        collapsed. Global-attribute findings are pulled into their own compact block (see
-        :meth:`_render_global_attributes`) ahead of the rest of each file's components.
+        Partitions the deduplicated findings by source and calls :meth:`_render_section` once
+        per source that survives the run's ``checks`` filter -- the same module -> file ->
+        component walk renders both sections rather than a second traversal. A source with no
+        surviving findings (or excluded by ``checks``) contributes no section at all, heading
+        included.
 
         Returns:
-            The rendered findings, or ``""`` if there is nothing to show.
+            The rendered sections joined by a blank line, or ``""`` if there is nothing to show.
         """
         deduped = self.deduplicated
         if not deduped:
             return ""
 
         by_finding = {entry.finding: entry for entry in deduped}
-        representatives = [entry.finding for entry in deduped]
+        sections: list[str] = []
+        for source in ValidationSource:
+            if self._checks is not None and source != self._checks:
+                continue
+            representatives = [
+                entry.finding for entry in deduped if entry.finding.validation == source
+            ]
+            body = self._render_section(representatives, by_finding, depth=1)
+            if body:
+                sections.append(f"{_section_heading(source)}\n{body}")
+        return "\n\n".join(sections)
 
+    def _render_section(
+        self,
+        representatives: list[Finding],
+        by_finding: dict[Finding, DedupedFinding],
+        depth: int,
+    ) -> str:
+        """Render one source's findings, grouped module -> produced-file template -> component.
+
+        ``depth`` is the module heading's indent level; every level below it (file, component,
+        grid) is derived from it, so a caller shifts the whole walk by passing one number rather
+        than by re-indenting each level by hand. Global-attribute findings are pulled into their
+        own compact block (see :meth:`_render_global_attributes`) ahead of the rest of each
+        file's components.
+
+        Returns:
+            The rendered findings, or ``""`` if there is nothing to show.
+        """
         # Reuse grouped_by by wrapping each axis's slice in a throwaway Report
         module_groups = Report(representatives).grouped_by(lambda finding: finding.module_name)
         lines: list[str] = []
@@ -467,16 +531,16 @@ class Report:
                 global_attributes = [f for f in file_findings if f.scope == "global_attribute"]
                 components = [f for f in file_findings if f.scope != "global_attribute"]
                 file_lines = [
-                    *self._render_global_attributes(global_attributes, by_finding),
-                    *self._render_components(components, by_finding),
+                    *self._render_global_attributes(global_attributes, by_finding, depth + 2),
+                    *self._render_components(components, by_finding, depth + 2),
                 ]
                 if not file_lines:
                     continue
-                module_lines.append(f"{_INDENT}{filepath}")
+                module_lines.append(f"{_INDENT * (depth + 1)}{filepath}")
                 module_lines.extend(file_lines)
             if not module_lines:
                 continue
-            lines.append(module_name)
+            lines.append(f"{_INDENT * depth}{module_name}")
             lines.extend(module_lines)
         return "\n".join(lines)
 
@@ -488,14 +552,14 @@ class Report:
         by_finding: dict[Finding, DedupedFinding],
         *,
         header: bool = True,
-        indent: int = 3,
+        indent: int,
     ) -> list[str]:
         """Render one heading, optionally its header row, then one (or more) lines per finding.
 
         Shared by a component's own findings, a nested attribute sub-block (``header=False``,
-        ``indent=4``, since one header already covers the whole component), and the
-        global-attribute block -- they differ only in heading text, findings shown, column
-        spec, and depth.
+        since one header already covers the whole component), and the global-attribute block --
+        they differ only in heading text, findings shown, column spec, and the caller-computed
+        ``indent``.
 
         Returns:
             The heading, the header row (if ``header``), then one line per finding, plus a
@@ -516,14 +580,15 @@ class Report:
         return lines
 
     def _render_components(
-        self, findings: list[Finding], by_finding: dict[Finding, DedupedFinding]
+        self, findings: list[Finding], by_finding: dict[Finding, DedupedFinding], depth: int
     ) -> list[str]:
         """Render one produced file's components, ordered by worst severity then name.
 
-        ``show_passed`` is a per-line rule: a PASSED finding is dropped unless it is set, and a
-        component (own findings plus any nested attribute findings) is skipped only once
-        nothing survives that filter -- superseding the old all-PASSED-component rule rather
-        than adding to it.
+        ``depth`` is the component heading's indent level, passed through to
+        :meth:`_render_component_block`. ``show_passed`` is a per-line rule: a PASSED finding is
+        dropped unless it is set, and a component (own findings plus any nested attribute
+        findings) is skipped only once nothing survives that filter -- superseding the old
+        all-PASSED-component rule rather than adding to it.
 
         Returns:
             One heading, one header row, and one (or two, if there is a message) lines per
@@ -563,6 +628,7 @@ class Report:
                     own_by_component.get(component, []),
                     nested_by_parent.get(component, []),
                     by_finding,
+                    depth,
                 )
             )
         return lines
@@ -573,43 +639,52 @@ class Report:
         own: list[Finding],
         nested: list[Finding],
         by_finding: dict[Finding, DedupedFinding],
+        depth: int,
     ) -> list[str]:
         """Render one variable's own findings, then its attribute findings as sub-blocks.
 
-        A variable with nested findings but none of its own still gets a heading and header
-        (``own`` may be empty; :meth:`_render_grid_block` renders them regardless). No sub-block
-        repeats the header row -- the component's own header already covers the whole thing.
+        ``depth`` is this component heading's indent level; its own header/rows sit at
+        ``depth + 1``, an attribute sub-heading also at ``depth + 1`` (a sibling of the header,
+        not nested under it), and its rows at ``depth + 2``. A variable with nested findings but
+        none of its own still gets a heading and header (``own`` may be empty;
+        :meth:`_render_grid_block` renders them regardless). No sub-block repeats the header row
+        -- the component's own header already covers the whole thing.
 
         Returns:
             The component's heading, header row and own rows, followed by one sub-heading and
             row group per distinct attribute, sorted by attribute name.
         """
         lines = self._render_grid_block(
-            f"{_INDENT * 2}{component}", _GRID, sorted(own, key=_render_order), by_finding
+            f"{_INDENT * depth}{component}",
+            _SECTION_GRID,
+            sorted(own, key=_render_order),
+            by_finding,
+            indent=depth + 1,
         )
         nested_by_attribute = Report(nested).grouped_by(lambda finding: finding.component)
         for attribute_component in sorted(nested_by_attribute):
             suffix = _attribute_heading(attribute_component, component)
             lines.extend(
                 self._render_grid_block(
-                    f"{_INDENT * 3}.{suffix}",
-                    _GRID,
+                    f"{_INDENT * (depth + 1)}.{suffix}",
+                    _SECTION_GRID,
                     sorted(nested_by_attribute[attribute_component], key=_render_order),
                     by_finding,
                     header=False,
-                    indent=4,
+                    indent=depth + 2,
                 )
             )
         return lines
 
     def _render_global_attributes(
-        self, findings: list[Finding], by_finding: dict[Finding, DedupedFinding]
+        self, findings: list[Finding], by_finding: dict[Finding, DedupedFinding], depth: int
     ) -> list[str]:
         """Render one produced file's global attributes as a single compact block.
 
-        A global attribute only ever produces one kind of line (an existence check against the
-        SoS rules), so ``source``, ``scope`` and ``check`` are constant across the whole block
-        and dropped in favour of just the attribute name, what was found, and its severity.
+        ``depth`` is this block's heading indent level; its header/rows sit at ``depth + 1``. A
+        global attribute only ever produces one kind of line (an existence check against the SoS
+        rules), so ``source``, ``scope`` and ``check`` are constant across the whole block and
+        dropped in favour of just the attribute name, what was found, and its severity.
 
         Returns:
             The block's heading, header row, and one line per shown attribute -- or ``[]`` when
@@ -628,7 +703,7 @@ class Report:
             _Column("severity", _SEVERITY_WIDTH, lambda finding: finding.status),
         )
         return self._render_grid_block(
-            f"{_INDENT * 2}global attributes", columns, findings, by_finding
+            f"{_INDENT * depth}global attributes", columns, findings, by_finding, indent=depth + 1
         )
 
 
@@ -693,6 +768,11 @@ def _attribute_heading(component: str, parent: str) -> str:
     return component.removeprefix(f"{parent}.")
 
 
+def _section_heading(source: ValidationSource) -> str:
+    """The findings-body heading for one source, e.g. ``Structure checks -- the module contract``."""
+    return f"{source.capitalize()} checks -- {_SECTION_COMPARISON[source]}"
+
+
 def _checks_block() -> str:
     """Build the legend's "Checks" block from :data:`_CHECKS_BY_SOURCE`.
 
@@ -755,7 +835,7 @@ def _grid_continuation(columns: tuple[_Column, ...]) -> str:
 def _grid_message_offset(columns: tuple[_Column, ...]) -> str:
     """Compute a grid's message indent: the start of its *second* column, from the same spec.
 
-    A mismatch message reads more naturally under the row's own ``scope``/``found`` values than
+    A mismatch message reads more naturally under the row's own ``check``/``found`` values than
     pushed out to the files column, which a wide grid can put well past 100 characters.
 
     Returns:
@@ -809,17 +889,3 @@ def _files_lines(
             "(use --csv for the full list)"
         )
     return lines
-
-
-_LEGEND = f"""\
-Declared = what the contract (structure) or the SoS rules (metadata) say should be there.
-Found    = what the produced file actually holds.
-
-PASSED     Declared and found, contract/rules match module file.
-MISSING    Declared, but not found in the file. Data is missing from the module file.
-EXTRA      Found in the file, but not declared. Extra data located in the module file.
-DIFFERENT  Declared and found, contract/rules do not match module file. Message indicates
-           values for both.
-SKIPPED    CIT could not run this check -- a gap in the tool, not in the data.
-
-{_checks_block()}"""

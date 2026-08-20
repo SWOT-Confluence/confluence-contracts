@@ -15,7 +15,7 @@ from collections.abc import Iterable, Iterator
 
 from cit.contract import Contract, Produces
 from cit.data import find_contract_files, find_result_files, find_rules_files, load_yaml
-from cit.report import DEFAULT_MAX_FILES, Finding, Report
+from cit.report import DEFAULT_MAX_FILES, Finding, Report, ValidationSource
 from cit.result import NetcdfResult
 from cit.rules import MetadataRules
 from cit.validation import Validator, ValidatorContext
@@ -97,6 +97,7 @@ class Orchestrate:
         show_passed: bool = False,
         show_files: bool = False,
         max_files: int = DEFAULT_MAX_FILES,
+        checks: ValidationSource | None = None,
     ) -> Report:
         """Validate every module (or a given subset) and aggregate a single report.
 
@@ -108,6 +109,8 @@ class Orchestrate:
             show_files: When True, the rendered report also lists the result-file basenames
                 behind a multi-file finding (see :class:`cit.report.Report`).
             max_files: How many basenames to list per finding when ``show_files`` is set.
+            checks: Restrict the rendered report to one :class:`~cit.report.ValidationSource`'s
+                section (see :class:`cit.report.Report`); passed straight through unvalidated.
 
         Returns:
             A :class:`Report` aggregating the findings across all validated modules, carrying
@@ -122,4 +125,5 @@ class Orchestrate:
             show_passed=show_passed,
             show_files=show_files,
             max_files=max_files,
+            checks=checks,
         )
