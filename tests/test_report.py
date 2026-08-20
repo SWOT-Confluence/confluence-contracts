@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+from cit import report
 from cit.contract import Contract
 from cit.report import Finding, FindingStatus, FindingType, Report
 
@@ -294,7 +295,7 @@ def test_nt_case_shows_passed_and_non_passed_lines_for_one_component():
 
     text = str(Report([as_dimension, as_variable]))
 
-    nt_idx = text.splitlines().index("    nt")
+    nt_idx = text.splitlines().index(f"{report._INDENT * 2}nt")
     component_lines = text.splitlines()[nt_idx + 1 : nt_idx + 3]
     assert any("dimension" in line and "PASSED" in line for line in component_lines)
     assert any("variable" in line and "EXTRA" in line for line in component_lines)
@@ -323,7 +324,9 @@ def test_components_sorted_by_worst_severity_then_name():
     text = str(Report([warn_component, fail_component]))
     lines = text.splitlines()
 
-    assert lines.index("    Qout") < lines.index("    zzz_extra")
+    assert lines.index(f"{report._INDENT * 2}Qout") < lines.index(
+        f"{report._INDENT * 2}zzz_extra"
+    )
 
 
 def test_finding_with_empty_filepath_and_no_results_file_does_not_raise():
@@ -337,8 +340,142 @@ def test_finding_with_empty_filepath_and_no_results_file_does_not_raise():
     )
 
     text = str(Report([orphan]))
+    shown_text = str(Report([orphan], show_files=True))
 
     assert "orphan_var" in text
+    assert "orphan_var" in shown_text
+    # No file behind the finding at all: no suffix and no list, even with show_files=True.
+    component_idx = text.splitlines().index(f"{report._INDENT * 2}orphan_var")
+    assert "file" not in text.splitlines()[component_idx + 1]
+
+
+# --- file-name rendering (x1 file -> basename, --show-files, --max-files) -------------------
+
+
+def test_lone_file_renders_basename_not_x1_file():
+    """A finding seen in exactly one file names that file, not the uninformative 'x1 file'."""
+    finding = _finding(
+        type=FindingType.EXTRA,
+        status=FindingStatus.WARN,
+        results_file="flpe/momma/74267700071_momma.nc",
+    )
+
+    text = str(Report([finding]))
+
+    assert "74267700071_momma.nc" in text
+    assert "x1 file" not in text
+
+
+def test_two_files_render_count_and_no_list_by_default():
+    """A finding seen in two files still renders just the count, with no list, by default."""
+    seen_in_a = _finding(
+        type=FindingType.EXTRA, status=FindingStatus.WARN, results_file="a_momma.nc"
+    )
+    seen_in_b = replace(seen_in_a, results_file="b_momma.nc")
+
+    text = str(Report([seen_in_a, seen_in_b]))
+
+    assert "x2 files" in text
+    assert "a_momma.nc" not in text
+    assert "b_momma.nc" not in text
+
+
+def test_show_files_lists_both_basenames_one_per_line():
+    """show_files=True lists each basename beneath the finding, at the continuation indent."""
+    seen_in_a = _finding(
+        type=FindingType.EXTRA, status=FindingStatus.WARN, results_file="a_momma.nc"
+    )
+    seen_in_b = replace(seen_in_a, results_file="b_momma.nc")
+
+    text = str(Report([seen_in_a, seen_in_b], show_files=True))
+    lines = text.splitlines()
+
+    expected_prefix = f"{report._INDENT * 3}{report._CONTINUATION}"
+    assert f"{expected_prefix}a_momma.nc" in lines
+    assert f"{expected_prefix}b_momma.nc" in lines
+
+
+def test_show_files_truncates_at_max_files_with_overflow_line():
+    """With seven files and max_files=5, exactly five are listed plus one overflow line."""
+    base = _finding(type=FindingType.EXTRA, status=FindingStatus.WARN)
+    findings = [replace(base, results_file=f"{i}_momma.nc") for i in range(7)]
+
+    text = str(Report(findings, show_files=True, max_files=5))
+    lines = text.splitlines()
+
+    basenames_shown = [f"{i}_momma.nc" for i in range(5)]
+    for basename in basenames_shown:
+        assert any(basename in line for line in lines)
+    assert not any("5_momma.nc" in line for line in lines)
+    assert not any("6_momma.nc" in line for line in lines)
+    assert any("... and 2 more (use --csv for the full list)" in line for line in lines)
+
+
+def test_show_files_no_overflow_line_when_not_truncated():
+    """When the file count is at or below max_files, no overflow line is rendered."""
+    base = _finding(type=FindingType.EXTRA, status=FindingStatus.WARN)
+    findings = [replace(base, results_file=f"{i}_momma.nc") for i in range(3)]
+
+    text = str(Report(findings, show_files=True, max_files=5))
+
+    assert "more" not in text
+
+
+def test_show_files_single_file_named_inline_not_repeated_as_list():
+    """A single file under show_files=True is named inline and not repeated as a list line."""
+    finding = _finding(
+        type=FindingType.EXTRA, status=FindingStatus.WARN, results_file="74267700071_momma.nc"
+    )
+
+    text = str(Report([finding], show_files=True))
+
+    assert text.count("74267700071_momma.nc") == 1
+
+
+def test_show_files_does_not_affect_exit_code():
+    """show_files only changes what __str__ renders, never the pass/fail policy."""
+    fail = _finding(type=FindingType.DIFFERENT, status=FindingStatus.FAIL)
+
+    assert Report([fail], show_files=True).exit_code == Report([fail]).exit_code == 1
+
+
+def test_str_is_deterministic_across_runs_with_show_files():
+    """Rendering with show_files=True is also deterministic across differently-ordered input."""
+    base = _finding(type=FindingType.EXTRA, status=FindingStatus.WARN)
+    findings = [replace(base, results_file=f"{i}_momma.nc") for i in range(7)]
+
+    first = str(Report(findings, show_files=True, max_files=5))
+    second = str(Report(list(reversed(findings)), show_files=True, max_files=5))
+
+    assert first == second
+
+
+# --- dangling module/filepath headings (all-PASS sections render nothing) -------------------
+
+
+def test_all_passed_module_hides_module_and_filepath_headings_by_default():
+    """A module whose components are all PASSED emits neither its module nor filepath heading."""
+    passed = _finding(module_name="momma", filepath="flpe/momma/{reach_id}_momma.nc")
+
+    default_text = str(Report([passed]))
+    shown_text = str(Report([passed], show_passed=True))
+
+    assert "momma" not in default_text
+    assert "flpe/momma/{reach_id}_momma.nc" not in default_text
+    assert "momma" in shown_text
+    assert "flpe/momma/{reach_id}_momma.nc" in shown_text
+
+
+def test_all_pass_body_message_distinct_from_empty_report_message():
+    """An all-PASS run says so explicitly, rather than reusing the empty-report '(no findings)'."""
+    passed = _finding()
+
+    all_pass_text = str(Report([passed]))
+    empty_text = str(Report([]))
+
+    assert "(no findings)" in empty_text
+    assert "(no findings)" not in all_pass_text
+    assert "every component passed" in all_pass_text
 
 
 def test_str_is_deterministic_across_runs():

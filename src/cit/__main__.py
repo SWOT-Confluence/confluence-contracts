@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import NoReturn
 
 from cit.orchestrate import Orchestrate
+from cit.report import DEFAULT_MAX_FILES
 
 logger = logging.getLogger("cit")
 
@@ -30,10 +31,20 @@ def _validate(args: argparse.Namespace) -> int:
             "cit validate: --results MOUNT is required (the run mount root, e.g. the directory "
             "containing flpe/momma/)."
         )
+    if args.max_files is not None and args.max_files < 1:
+        raise SystemExit(
+            f"cit validate: --max-files must be at least 1 (got {args.max_files})."
+        )
 
+    show_files = args.show_files or args.max_files is not None
+    max_files = DEFAULT_MAX_FILES if args.max_files is None else args.max_files
     orchestrate = Orchestrate(args.results)
     report = orchestrate.run(
-        strict=args.strict, modules=args.module, show_passed=args.show_passed
+        strict=args.strict,
+        modules=args.module,
+        show_passed=args.show_passed,
+        show_files=show_files,
+        max_files=max_files,
     )
 
     text = str(report)
@@ -144,6 +155,23 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         dest="show_passed",
         help="Also render components whose findings are all PASSED.",
+    )
+    validate.add_argument(
+        "--show-files",
+        action="store_true",
+        dest="show_files",
+        help="List the result files behind each finding (truncated; see --max-files).",
+    )
+    validate.add_argument(
+        "--max-files",
+        type=int,
+        default=None,
+        dest="max_files",
+        metavar="N",
+        help=(
+            "Cap how many result files are listed per finding "
+            f"(default: {DEFAULT_MAX_FILES}). Implies --show-files."
+        ),
     )
     validate.add_argument(
         "--report",

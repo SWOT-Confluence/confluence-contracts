@@ -172,6 +172,22 @@ def test_fail_introduced_exits_one(contract_file, tmp_path, monkeypatch, capsys)
     assert "f8" in text and "i4" in text
 
 
+def test_fail_finding_names_the_lone_result_file_basename(
+    contract_file, tmp_path, monkeypatch, capsys
+):
+    """A finding seen in exactly one file names that file's basename, not 'x1 file'."""
+    result_dir = tmp_path / "mnt3" / "synth"
+    result_dir.mkdir(parents=True)
+    _write_nc(result_dir / "11111111111_synth.nc", dtype="i4")
+
+    exit_code = _run_cli(monkeypatch, contract_file, tmp_path / "mnt3")
+
+    assert exit_code == 1
+    text = capsys.readouterr().out
+    assert "11111111111_synth.nc" in text
+    assert "x1 file" not in text
+
+
 def test_strict_flips_rule_warning_to_fail_exit_code(
     contract_file, mount, rules_file, monkeypatch, capsys
 ):

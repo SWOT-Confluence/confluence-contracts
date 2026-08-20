@@ -25,13 +25,17 @@ is shown only if at least one of its findings is not PASSED, and then *all* of i
 ``show_passed`` additionally reveals components whose findings are all PASSED.
 
 :meth:`Report.write_csv` (P1-9.4) exports every raw finding -- one row per occurrence, no
-deduplication -- as the triage escape hatch for the file-level detail the deduplicated text
-report deliberately drops.
+deduplication -- as the triage escape hatch for the full per-file detail.
 
-Planned (P1-9, remaining):
+A finding seen in exactly one file names that file's basename inline in place of the count
+(``x1 file``), always. A finding seen in more than one file still renders just the count by
+default; passing ``show_files`` also lists each distinct basename beneath the finding line, one
+per line, capped at ``max_files`` with a trailing ``... and N more`` line when truncated -- the
+mount-scale case where dozens of files share a finding still fits on screen.
 
-- CLI wiring (9.5): ``cit validate``/``cit parse`` and the locked ``print(report);
-  sys.exit(report.exit_code)`` shape.
+A module/filepath heading is only rendered when it has at least one component beneath it, so a
+module whose components all passed (and are hidden by default) does not print a heading with
+nothing under it.
 """
 
 import csv
@@ -59,6 +63,17 @@ DIFFERENT  Declared and found, contract/rules do not match module file. Message 
 
 _CHECK_WIDTH = len("global_attribute")
 _TYPE_WIDTH = len("DIFFERENT")
+
+# Public (no leading underscore): imported across module boundaries by orchestrate.py and
+# __main__.py so the default lives in exactly one place.
+DEFAULT_MAX_FILES = 5
+
+# Below this many distinct files, _files_suffix already names the lone file inline, so
+# _files_lines has nothing left to add.
+_MIN_FILES_TO_LIST = 2
+
+_INDENT = " " * 4
+_CONTINUATION = " " * (_CHECK_WIDTH + _TYPE_WIDTH + 1)
 
 
 def _cit_version() -> str:
@@ -203,13 +218,15 @@ class Report:
         contracts: dict[str, Contract] | None = None,
         *,
         show_passed: bool = False,
+        show_files: bool = False,
+        max_files: int = DEFAULT_MAX_FILES,
     ) -> None:
         """Store the findings to aggregate, plus what ``__str__`` needs to render them.
 
-        ``contracts`` and ``show_passed`` are both optional so existing ``Report(findings)``
-        callers (including every test written before P1-9.3) keep working unchanged; without
-        them ``__str__`` still renders, just with a degraded banner and PASSED-only components
-        hidden.
+        ``contracts``, ``show_passed``, ``show_files``, and ``max_files`` are all optional so
+        existing ``Report(findings)`` callers (including every test written before P1-9.3) keep
+        working unchanged; without them ``__str__`` still renders, just with a degraded banner,
+        PASSED-only components hidden, and no per-file lists beneath multi-file findings.
 
         Args:
             findings: The check outcomes collected across a validation run.
@@ -218,10 +235,17 @@ class Report:
                 the banner. ``None`` renders a banner with no per-module version data.
             show_passed: When True, ``__str__`` also renders components whose findings are all
                 PASSED, not just the ones with at least one non-PASSED finding.
+            show_files: When True, ``__str__`` also lists the distinct result-file basenames
+                beneath a finding seen in more than one file (a lone file is always named
+                inline, regardless of this flag).
+            max_files: How many basenames to list per finding when ``show_files`` is set, before
+                truncating with a ``... and N more`` line.
         """
         self._findings = list(findings)
         self._contracts = contracts or {}
         self._show_passed = show_passed
+        self._show_files = show_files
+        self._max_files = max_files
 
     @property
     def findings(self) -> list[Finding]:
@@ -330,7 +354,8 @@ class Report:
 
         Returns:
             The full report text, deterministic for a given set of findings/contracts/
-            ``show_passed`` -- byte-identical across runs on the same inputs.
+            ``show_passed``/``show_files``/``max_files`` -- byte-identical across runs on the
+            same inputs.
         """
         sections = [
             self._banner(),
@@ -341,7 +366,14 @@ class Report:
             "",
         ]
         body = self._render_findings()
-        sections.append(body if body else "(no findings)")
+        if body:
+            sections.append(body)
+        elif not self.deduplicated:
+            sections.append("(no findings)")
+        else:
+            sections.append(
+                "(no findings to show -- every component passed; use --show-passed to list them)"
+            )
         return "\n".join(sections)
 
     def _banner(self) -> str:
@@ -405,18 +437,23 @@ class Report:
 
         by_finding = {entry.finding: entry for entry in deduped}
         representatives = [entry.finding for entry in deduped]
-        # Reuse grouped_by (not a bespoke method per axis) by wrapping each axis's slice in a
-        # throwaway Report -- grouping logic lives in exactly one place regardless of how many
-        # axes rendering nests through.
-        module_groups = Report(representatives).grouped_by(lambda finding: finding.module_name)
 
+        # Reuse grouped_by by wrapping each axis's slice in a throwaway Report
+        module_groups = Report(representatives).grouped_by(lambda finding: finding.module_name)
         lines: list[str] = []
         for module_name, module_findings in module_groups.items():
-            lines.append(module_name)
+            module_lines: list[str] = []
             file_groups = Report(module_findings).grouped_by(lambda finding: finding.filepath)
             for filepath, file_findings in file_groups.items():
-                lines.append(f"  {filepath}")
-                lines.extend(self._render_components(file_findings, by_finding))
+                component_lines = self._render_components(file_findings, by_finding)
+                if not component_lines:
+                    continue
+                module_lines.append(f"{_INDENT}{filepath}")
+                module_lines.extend(component_lines)
+            if not module_lines:
+                continue
+            lines.append(module_name)
+            lines.extend(module_lines)
         return "\n".join(lines)
 
     def _render_components(
@@ -445,16 +482,18 @@ class Report:
             all_passed = all(f.type == FindingType.PASSED for f in component_findings)
             if all_passed and not self._show_passed:
                 continue
-            lines.append(f"    {component}")
+            lines.append(f"{_INDENT * 2}{component}")
             for finding in component_findings:
                 entry = by_finding[finding]
                 line = (
-                    f"      {finding.check:<{_CHECK_WIDTH}} {finding.type:<{_TYPE_WIDTH}} "
+                    f"{_INDENT * 3}{finding.check:<{_CHECK_WIDTH}} {finding.type:<{_TYPE_WIDTH}} "
                     f"{_files_suffix(entry)}"
                 )
                 lines.append(line.rstrip())
                 if finding.message:
-                    lines.append(f"      {' ' * (_CHECK_WIDTH + _TYPE_WIDTH + 1)}{finding.message}")
+                    lines.append(f"{_INDENT * 3}{_CONTINUATION}{finding.message}")
+                if self._show_files:
+                    lines.extend(_files_lines(entry, self._max_files))
         return lines
 
 
@@ -463,15 +502,48 @@ def _files_suffix(entry: DedupedFinding) -> str:
 
     Tolerates a finding with no file at all (e.g. P1-17's registry cross-check, which has
     nothing on disk behind it): if every ``entry.files`` value is empty, no suffix is rendered.
+    A finding seen in exactly one file names that file's basename instead of the otherwise
+    useless ``x1 file`` -- the count is pure noise when there is only one file to begin with.
 
     Args:
         entry: The deduplicated finding to describe.
 
     Returns:
-        ``"x<n> file(s)"`` for the distinct non-empty ``results_file`` values seen, or ``""``.
+        The lone file's basename if there is exactly one, ``"x<n> files"`` for more than one, or
+        ``""`` when there is no file behind the finding at all.
     """
     real_files = [f for f in entry.files if f]
     if not real_files:
         return ""
-    noun = "file" if len(real_files) == 1 else "files"
-    return f"x{len(real_files)} {noun}"
+    if len(real_files) == 1:
+        return Path(real_files[0]).name
+    return f"x{len(real_files)} files"
+
+
+def _files_lines(entry: DedupedFinding, max_files: int) -> list[str]:
+    """Render the indented basenames to list beneath a multi-file finding, capped and sorted.
+
+    A single file is never listed here even when present -- :func:`_files_suffix` already names
+    it inline, and listing it again would be a redundant one-line list under every finding.
+
+    Args:
+        entry: The deduplicated finding whose files to list.
+        max_files: How many basenames to render before truncating.
+
+    Returns:
+        One already-indented line per basename (up to ``max_files``, in ``entry.files``' sorted
+        order), plus a trailing ``... and N more (use --csv for the full list)`` line when
+        truncated. Empty when there are fewer than two non-empty files.
+    """
+    real_files = [f for f in entry.files if f]
+    if len(real_files) < _MIN_FILES_TO_LIST:
+        return []
+
+    shown = real_files[:max_files]
+    lines = [f"{_INDENT * 3}{_CONTINUATION}{Path(f).name}" for f in shown]
+    remaining = len(real_files) - len(shown)
+    if remaining:
+        lines.append(
+            f"{_INDENT * 3}{_CONTINUATION}... and {remaining} more (use --csv for the full list)"
+        )
+    return lines

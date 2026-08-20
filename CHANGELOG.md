@@ -11,50 +11,51 @@ and the PR descriptions.
 
 ### Added
 
-- **Project scaffolding:** the pip-installable `confluence-contracts` package exposing the `cit`
-  command, `uv`-managed dependencies, and the ruff/pytest tooling baseline
-  ([#22](https://github.com/SWOT-Confluence/confluence-contracts/pull/22)).
-- **Contract models & schema:** the Pydantic v2 models describing a module contract (the EXPECTED
-  side) and the deterministic JSON Schema generated from them into `schema/contract.schema.json`
+- **Project scaffolding:** CIT is now a pip-installable Python package, `confluence-contracts`,
+  that puts a `cit` command on your PATH. Its dependencies and its ruff and pytest tooling are
+  managed with `uv` ([#22](https://github.com/SWOT-Confluence/confluence-contracts/pull/22)).
+- **Contract models and schema:** A contract is the YAML file that declares what a Confluence
+  module's result files are supposed to contain, and Pydantic models now define and validate that
+  structure. A JSON Schema is generated from those models into `schema/contract.schema.json`, so an
+  editor or a CI job can check a contract before CIT ever runs
   ([#23](https://github.com/SWOT-Confluence/confluence-contracts/pull/23)).
-- **NetCDF reader & result model:** the single format-aware layer (`netcdf.py`) plus the lazy,
-  cached read model for a produced file (the ACTUAL side), covering flat, grouped, and
-  algorithm-indexed files
+- **NetCDF reader and result model:** CIT can now open a result file a module produced and read
+  back its dimensions, variables and attributes, handling flat, grouped and algorithm-indexed
+  layouts alike. Reads are lazy and cached, so nothing is pulled off disk until a check asks for it
   ([#24](https://github.com/SWOT-Confluence/confluence-contracts/pull/24)).
-- **I/O layer & streaming orchestrator:** package-data and run-mount discovery, and an orchestrator
-  that streams one produced file at a time so peak memory stays at a single result
-  ([#25](https://github.com/SWOT-Confluence/confluence-contracts/pull/25)).
-- **Structural validator:** the self-registering `Validator` framework and `ContractValidator`,
-  comparing a contract against a produced file in both directions — dimension and variable
-  existence, dtype, and dimension ordering — and emitting typed `Finding`s
+- **File discovery and streaming orchestrator:** CIT now locates the contracts bundled inside the
+  installed package and the matching result files under a run mount on disk. It validates one file
+  at a time rather than loading them all, so memory use stays flat however many files a run
+  produced ([#25](https://github.com/SWOT-Confluence/confluence-contracts/pull/25)).
+- **Structural validator:** The first validator compares a contract against a produced file in both
+  directions, reporting anything that is declared but missing, present but undeclared, or
+  mismatched in data type or dimension order. Validators register themselves, so adding another
+  kind of check does not mean changing the code that runs them
   ([#7](https://github.com/SWOT-Confluence/confluence-contracts/issues/7)).
-- **SoS metadata-rules artifact:** `tools/rules_convert.py` generates the bundled
-  `src/cit/resources/rules/sos_results_rules.yml` from `docs/sos-dataset/sos metadata.xlsx`;
-  the committed artifact holds 32 required global attributes, 14 module groups with per-variable
-  SoS metadata (long_name, units, valid_min/max, coverage_content_type), and the 4 canonical
-  fill-value types, and declares the `module_name` and `filepath` it governs so several artifacts
-  can be loaded and matched to the produced file each applies to; drift-guarded by
-  `tests/test_rules_artifact.py`
+- **SoS metadata rules artifact:** The metadata required of the SWORD of Science (SoS) dataset that
+  Confluence publishes to NASA's PO.DAAC archive is maintained by the science team in a
+  spreadsheet, and `tools/rules_convert.py` converts that spreadsheet into a YAML artifact shipped
+  with the package. A test re-runs the conversion and fails if the committed artifact has drifted,
+  so it is never hand-edited
   ([#8](https://github.com/SWOT-Confluence/confluence-contracts/issues/8)).
-- **SoS metadata-rules validator:** `RulesValidator` lints a produced file's metadata against the
-  rules artifact — required global attributes, the mandatory per-variable set (`long_name`,
-  `units`, `coverage_content_type`), agreement with the spreadsheet's expected values,
-  `valid_min <= valid_max`, and the canonical fill value for the dtype — with `--strict`
-  escalating violations to failures, and ships the first bundled contract for the aggregated
-  SoS results file (`contracts/output.yml`, 212 variables across 28 groups)
+- **SoS metadata-rules validator:** A second validator checks a produced file's metadata against
+  those rules — the global attributes every file must carry, the per-variable attributes such as
+  `long_name` and `units`, whether their values match the spreadsheet, and whether a variable's
+  fill value is the canonical one for its data type. Violations are reported as warnings by
+  default and become failures under `--strict`, and the first contract for the aggregated SoS
+  results file ships alongside as `contracts/output.yml`
   ([#9](https://github.com/SWOT-Confluence/confluence-contracts/issues/9)).
-- **Findings report & the working `cit validate`:** `Report` aggregates `Finding`s across a
-  run — deduplicating by content, grouping component-first (module → produced file →
-  component, components ranked by worst severity) with a version banner and summary counts —
-  plus `Report.write_csv` for one row per raw occurrence. The `cit validate` subcommand wires
-  this into the CLI end to end (`[--module M ...] [--results MOUNT] [--strict] [--show-passed]
-  [--report PATH] [--csv PATH]`), exiting 1 iff any finding is a FAIL, and adds a new
-  report-only `FindingStatus.REPORT` reserved for future health checks
+- **Findings report and a working `cit validate`:** `cit validate --results <mount>` now checks a
+  run's files against their contracts and prints a report grouped by module, then produced file,
+  then component, collapsing a finding that recurs across many files into one line and exiting 1
+  if anything failed. `--show-passed` also lists the checks that agreed, `--show-files` names the
+  files behind a finding (capped by `--max-files`), and `--report` and `--csv` save the text report
+  and a full one-row-per-occurrence export
   ([#10](https://github.com/SWOT-Confluence/confluence-contracts/issues/10)).
 
 ### Changed
 
-- **`VariableContract.shape` renamed to `dimensions`:** the field holds dimension *names*, not
-  sizes, so the contract model now mirrors netCDF's own `Variable.dimensions`. Existing
-  `contracts/*.yml` files must rename the key; `schema/contract.schema.json` regenerated
+- **A variable's `shape` field is now called `dimensions`:** The field lists dimension *names*
+  rather than sizes, so it now carries the same name netCDF itself uses. Every existing contract
+  file must rename the key, and `schema/contract.schema.json` has been regenerated to match
   ([#7](https://github.com/SWOT-Confluence/confluence-contracts/issues/7)).
