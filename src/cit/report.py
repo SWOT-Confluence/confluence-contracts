@@ -530,7 +530,8 @@ class Report:
         grid) is derived from it, so a caller shifts the whole walk by passing one number rather
         than by re-indenting each level by hand. Global-attribute findings are pulled into their
         own compact block (see :meth:`_render_global_attributes`) ahead of the rest of each
-        file's components.
+        file's components, which in turn share one column header, rendered here once per produced
+        file rather than once per component.
 
         Args:
             representatives: One deduplicated finding per distinct occurrence, all from this
@@ -551,9 +552,15 @@ class Report:
             for filepath, file_findings in file_groups.items():
                 global_attributes = [f for f in file_findings if f.scope == "global_attribute"]
                 components = [f for f in file_findings if f.scope != "global_attribute"]
+                component_lines = self._render_components(components, by_finding, depth + 2)
+                if component_lines:
+                    # One level deeper than the component headings that follow it, so it
+                    # aligns with the finding rows it describes rather than the headings.
+                    header_row = f"{_INDENT * (depth + 3)}{_grid_header(_SECTION_GRID)}"
+                    component_lines = [header_row, *component_lines]
                 file_lines = [
                     *self._render_global_attributes(global_attributes, by_finding, depth + 2),
-                    *self._render_components(components, by_finding, depth + 2),
+                    *component_lines,
                 ]
                 if not file_lines:
                     continue
@@ -619,7 +626,8 @@ class Report:
         :meth:`_render_component_block`. ``show_passed`` is a per-line rule: a PASSED finding is
         dropped unless it is set, and a component (own findings plus any nested attribute
         findings) is skipped only once nothing survives that filter -- superseding the old
-        all-PASSED-component rule rather than adding to it.
+        all-PASSED-component rule rather than adding to it. The shared column header is rendered
+        by the caller, once per produced file, rather than here.
 
         Args:
             findings: This file's non-global-attribute findings, both component-level and
@@ -629,9 +637,9 @@ class Report:
             depth: The component heading's indent level.
 
         Returns:
-            One heading, one header row, and one (or two, if there is a message) lines per
-            finding, for every component that is shown, with attribute findings nested beneath
-            their variable rather than rendered as components of their own.
+            One heading and one (or two, if there is a message) lines per finding, for every
+            component that is shown, with attribute findings nested beneath their variable
+            rather than rendered as components of their own.
         """
         if not self._show_passed:
             findings = [f for f in findings if f.type != FindingType.PASSED]
@@ -646,25 +654,12 @@ class Report:
         own_by_component = Report(own).grouped_by(lambda finding: finding.component)
         nested_by_parent = Report(nested).grouped_by(lambda finding: finding.parent)
 
-        # Ranked over both buckets, so a variable whose only failure sits in a nested attribute
-        # still outranks a WARN-only variable with nothing nested at all.
-        def worst_severity(component: str) -> int:
-            """Return the lowest (worst) severity rank across a component's own and nested findings.
-
-            Args:
-                component: The component name to rank, a key of ``own_by_component`` and/or
-                    ``nested_by_parent``.
-
-            Returns:
-                The lowest :data:`_SEVERITY` value across both buckets for this component.
-            """
-            own_findings = own_by_component.get(component, ())
-            nested_findings = nested_by_parent.get(component, ())
-            return min(_SEVERITY[finding.status] for finding in (*own_findings, *nested_findings))
-
         ordered = sorted(
             set(own_by_component) | set(nested_by_parent),
-            key=lambda component: (worst_severity(component), component),
+            key=lambda component: (
+                _worst_severity(component, own_by_component, nested_by_parent),
+                component,
+            ),
         )
 
         lines: list[str] = []
@@ -690,12 +685,12 @@ class Report:
     ) -> list[str]:
         """Render one variable's own findings, then its attribute findings as sub-blocks.
 
-        ``depth`` is this component heading's indent level; its own header/rows sit at
-        ``depth + 1``, an attribute sub-heading also at ``depth + 1`` (a sibling of the header,
-        not nested under it), and its rows at ``depth + 2``. A variable with nested findings but
-        none of its own still gets a heading and header (``own`` may be empty;
-        :meth:`_render_grid_block` renders them regardless). No sub-block repeats the header row
-        -- the component's own header already covers the whole thing.
+        ``depth`` is this component heading's indent level; its own rows sit at ``depth + 1``, an
+        attribute sub-heading also at ``depth + 1`` (a sibling of those rows, not nested under
+        them), and its rows at ``depth + 2``. A variable with nested findings but none of its own
+        still gets a heading (``own`` may be empty; :meth:`_render_grid_block` renders it
+        regardless). Neither block renders a header row -- the per-file header rendered by
+        :meth:`_render_section` already covers every component in the file.
 
         Args:
             component: The variable name this block is about.
@@ -706,14 +701,15 @@ class Report:
             depth: This component heading's indent level.
 
         Returns:
-            The component's heading, header row and own rows, followed by one sub-heading and
-            row group per distinct attribute, sorted by attribute name.
+            The component's heading and own rows, followed by one sub-heading and row group per
+            distinct attribute, sorted by attribute name.
         """
         lines = self._render_grid_block(
             f"{_INDENT * depth}{component}",
             _SECTION_GRID,
             sorted(own, key=_render_order),
             by_finding,
+            header=False,
             indent=depth + 1,
         )
         nested_by_attribute = Report(nested).grouped_by(lambda finding: finding.component)
@@ -823,6 +819,30 @@ def _render_order(finding: Finding) -> tuple[bool, int, Check, FindingType]:
         finding.check,
         finding.type,
     )
+
+
+def _worst_severity(
+    component: str,
+    own_by_component: dict[str, list[Finding]],
+    nested_by_parent: dict[str, list[Finding]],
+) -> int:
+    """Return the lowest (worst) severity rank across a component's own and nested findings.
+
+    Ranked over both buckets, so a variable whose only failure sits in a nested attribute still
+    outranks a WARN-only variable with nothing nested at all.
+
+    Args:
+        component: The component name to rank, a key of ``own_by_component`` and/or
+            ``nested_by_parent``.
+        own_by_component: A file's non-attribute findings, grouped by component name.
+        nested_by_parent: A file's attribute findings, grouped by their parent component name.
+
+    Returns:
+        The lowest :data:`_SEVERITY` value across both buckets for this component.
+    """
+    own_findings = own_by_component.get(component, ())
+    nested_findings = nested_by_parent.get(component, ())
+    return min(_SEVERITY[finding.status] for finding in (*own_findings, *nested_findings))
 
 
 def _attribute_heading(component: str, parent: str) -> str:

@@ -318,14 +318,14 @@ def test_nt_case_hides_the_passed_line_by_default_and_shows_it_with_show_passed(
 
     default_lines = default_text.splitlines()
     nt_idx = default_lines.index(f"{report._INDENT * 3}nt")
-    # nt_idx + 1 is the header row; the finding lines follow it.
-    default_component_lines = default_lines[nt_idx + 2 : nt_idx + 4]
+    # The shared per-file header now sits before the "nt" heading; its own rows follow directly.
+    default_component_lines = default_lines[nt_idx + 1 : nt_idx + 3]
     assert not any("PASSED" in line for line in default_component_lines)
     assert any("variable" in line and "EXTRA" in line for line in default_component_lines)
 
     shown_lines = shown_text.splitlines()
     shown_nt_idx = shown_lines.index(f"{report._INDENT * 3}nt")
-    shown_component_lines = shown_lines[shown_nt_idx + 2 : shown_nt_idx + 4]
+    shown_component_lines = shown_lines[shown_nt_idx + 1 : shown_nt_idx + 3]
     assert any("dimension" in line and "PASSED" in line for line in shown_component_lines)
     assert any("variable" in line and "EXTRA" in line for line in shown_component_lines)
 
@@ -374,9 +374,9 @@ def test_finding_with_empty_filepath_and_no_results_file_does_not_raise():
     assert "orphan_var" in text
     assert "orphan_var" in shown_text
     # No file behind the finding at all: no suffix and no list, even with show_files=True.
-    # component_idx + 1 is the header row (which itself says "files"); the finding row follows.
+    # component_idx + 1 is the finding row -- no header follows the heading anymore.
     component_idx = text.splitlines().index(f"{report._INDENT * 3}orphan_var")
-    assert "file" not in text.splitlines()[component_idx + 2]
+    assert "file" not in text.splitlines()[component_idx + 1]
 
 
 # --- file-name rendering (x1 file -> basename, --show-files, --max-files) -------------------
@@ -683,15 +683,86 @@ def test_structure_section_precedes_metadata_section_regardless_of_severity():
     assert structure_idx < metadata_idx
 
 
-def test_header_row_appears_once_per_shown_component():
-    """Each shown component prints its own header row, once, at the finding indent."""
+def test_header_row_appears_once_per_produced_file_not_per_component():
+    """One shared header row, at the finding indent, covers every component in a produced file."""
     finding_a = _finding(component="a", type=FindingType.EXTRA, status=FindingStatus.WARN)
     finding_b = _finding(component="b", type=FindingType.EXTRA, status=FindingStatus.WARN)
 
     body = Report([finding_a, finding_b])._render_findings()
 
     header = f"{report._INDENT * 4}{report._grid_header(report._SECTION_GRID)}"
-    assert body.count(header) == 2
+    assert body.count(header) == 1
+
+
+def test_shared_header_sits_directly_after_the_file_heading():
+    """The shared header renders immediately after the produced-file heading, before any component."""
+    finding = _finding(component="stage", type=FindingType.EXTRA, status=FindingStatus.WARN)
+
+    text = str(Report([finding]))
+    lines = text.splitlines()
+
+    file_idx = lines.index(f"{report._INDENT * 2}{finding.filepath}")
+    header = f"{report._INDENT * 4}{report._grid_header(report._SECTION_GRID)}"
+    assert lines[file_idx + 1] == header
+
+
+def test_no_shared_header_when_only_the_global_attribute_block_survives():
+    """A produced file with nothing but a global-attribute block prints no lone component header."""
+    global_attribute = _finding(
+        scope="global_attribute",
+        check=Check.EXISTS,
+        component="title",
+        type=FindingType.MISSING,
+        status=FindingStatus.WARN,
+    )
+    all_passed_component = _finding(component="stage")  # PASSED, filtered out by default
+
+    body = Report([global_attribute, all_passed_component])._render_findings()
+
+    assert "global attributes" in body
+    assert report._grid_header(report._SECTION_GRID) not in body
+
+
+def test_no_shared_header_when_no_findings_survive_show_passed_filtering():
+    """A produced file whose only finding is filtered out by show_passed prints no lone header."""
+    all_passed_component = _finding(component="stage")  # PASSED, filtered out by default
+
+    body = Report([all_passed_component])._render_findings()
+
+    assert body == ""
+
+
+def test_header_and_rows_share_the_same_column_offsets_across_multiple_components():
+    """The header's message and --show-files offsets still line up with every component's rows.
+
+    Guards against an offset computed in one context (e.g. the file heading) and reused to
+    render another -- the defect that has broken this alignment twice before, now with the
+    header shared across two components rather than repeated per component.
+    """
+    finding_a = _finding(
+        component="a", type=FindingType.DIFFERENT, status=FindingStatus.FAIL, message="detail-a"
+    )
+    base_b = _finding(component="b", type=FindingType.EXTRA, status=FindingStatus.WARN)
+    findings_b = [replace(base_b, results_file=f"{i}_momma.nc") for i in range(3)]
+
+    text = str(Report([finding_a, *findings_b], show_files=True))
+    lines = text.splitlines()
+
+    header = f"{report._INDENT * 4}{report._grid_header(report._SECTION_GRID)}"
+    header_idx = lines.index(header)
+    check_start = header.index("check")
+    files_start = header.index("files")
+
+    # header, then "a"'s heading, then a's own row, then a's message.
+    a_message_line = lines[header_idx + 3]
+    assert a_message_line[:check_start].strip() == ""
+    assert a_message_line[check_start:] == "detail-a"
+
+    b_row_idx = next(i for i, line in enumerate(lines) if "x3 files" in line)
+    assert lines[b_row_idx].index("x3 files") == files_start
+    continuation_line = lines[b_row_idx + 1]
+    assert continuation_line[:files_start].strip() == ""
+    assert continuation_line[files_start:].startswith("0_momma.nc")
 
 
 def test_fail_and_warn_missing_findings_no_longer_render_identically():
@@ -890,10 +961,11 @@ def test_message_renders_under_check_in_the_component_grid():
     lines = text.splitlines()
 
     component_idx = lines.index(f"{report._INDENT * 3}stage")
-    header_line = lines[component_idx + 1]
+    # The shared per-file header now sits one line before the component heading.
+    header_line = lines[component_idx - 1]
     check_start = header_line.index("check")
 
-    message_line = lines[component_idx + 3]
+    message_line = lines[component_idx + 2]
     assert message_line[:check_start].strip() == ""
     assert message_line[check_start:] == "mismatch detail"
 
@@ -1174,7 +1246,8 @@ def test_section_grid_drops_source_and_header_matches_the_rows_beneath_it():
 
     header = f"{report._INDENT * 4}{report._grid_header(report._SECTION_GRID)}"
     header_idx = lines.index(header)
-    row = lines[header_idx + 1]
+    # header_idx + 1 is the component heading; its own row follows that.
+    row = lines[header_idx + 2]
 
     assert "source" not in header
     assert header.split()[: len(report._SECTION_GRID)] == ["scope", "check", "found", "severity"]
