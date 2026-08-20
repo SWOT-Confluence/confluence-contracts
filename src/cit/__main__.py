@@ -108,6 +108,9 @@ def build_parser() -> argparse.ArgumentParser:
     given, argparse's subparser-defaults merge (which otherwise unconditionally overwrites the
     parent namespace with the subparser's own defaults) leaves ``verbose`` untouched, so a
     ``-v`` given before the subcommand survives.
+
+    Returns:
+        The configured top-level parser, with ``validate`` and ``parse`` subparsers attached.
     """
     top_shared = argparse.ArgumentParser(add_help=False)
     top_shared.add_argument(

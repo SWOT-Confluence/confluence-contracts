@@ -91,10 +91,6 @@ _YAML_HEADER = (
 def parse_global_attributes(wb: openpyxl.Workbook) -> list[str]:
     """Return the names of required global attributes from the spreadsheet.
 
-    Reads the ``SoS Results Global Attributes`` sheet. The first row is a
-    header and is skipped. Any subsequent row whose first column is ``True``
-    contributes its attribute name (second column) to the result.
-
     Args:
         wb: An open openpyxl workbook (``read_only=True, data_only=True``).
 
@@ -110,11 +106,8 @@ def parse_global_attributes(wb: openpyxl.Workbook) -> list[str]:
 def parse_variable_attributes(wb: openpyxl.Workbook) -> dict:
     """Return per-variable SoS attribute dicts grouped by module name.
 
-    Reads the ``SoS Results Variables`` sheet. The first two rows (header and
-    column-description row) are skipped. Rows where the variable name (column 2)
-    or group name (column 0) is ``None`` are skipped. The ``_FillValue`` column
-    is excluded from each variable's attribute dict; ``None`` values in any
-    retained attribute are also omitted.
+    The ``_FillValue`` column is excluded here -- :func:`parse_fill_values` and the canonical
+    fill-value table cover it instead, so each variable's fill value is checked once, not twice.
 
     Args:
         wb: An open openpyxl workbook (``read_only=True, data_only=True``).
@@ -152,14 +145,9 @@ def parse_variable_attributes(wb: openpyxl.Workbook) -> dict:
 def parse_fill_values(wb: openpyxl.Workbook) -> dict:
     """Return the SoS fill-value table keyed by type name.
 
-    Reads the ``Fill Values`` sheet. Rows where the type-name column is ``None``
-    are skipped. Two special cases apply:
-
-    - ``Float``: openpyxl returns ``-999999999999.0`` (float-precision artefact);
-      it is replaced by the canonical ``-9.99999999999e+11``.
-    - ``Char``: openpyxl returns ``'"x"'`` (with surrounding double-quotes);
-      the quotes are stripped to yield ``'x'``.
-    - ``Int``/``Int9``: whole-number floats (e.g. ``-999.0``) are cast to ``int``.
+    Normalizes three spreadsheet artefacts on the way out: openpyxl's float-precision reading of
+    the ``Float`` fill is replaced by the canonical value, whole-number ``Int``/``Int9`` fills
+    are cast to ``int``, and the ``Char`` fill's surrounding quotes are stripped.
 
     Args:
         wb: An open openpyxl workbook (``read_only=True, data_only=True``).

@@ -47,6 +47,9 @@ def _status(escalate: bool) -> FindingStatus:
 
     Escalated by ``--strict`` for rule violations, and by ``required`` for contract variables.
 
+    Args:
+        escalate: Whether this finding should fail the run rather than just warn.
+
     Returns:
         FAIL when ``escalate``, else WARN.
     """
@@ -94,6 +97,9 @@ class _Reporter:
             check: The specific question asked about it (see :class:`Check`).
             parent: The variable name this finding nests under in the report, for an
                 attribute-scoped finding; ``""`` (the default) for every other scope.
+
+        Returns:
+            The constructed :class:`Finding`.
         """
         return Finding(
             type=finding_type,
@@ -201,7 +207,11 @@ class Validator(ABC):
     _registry: list[type["Validator"]] = []
 
     def __init_subclass__(cls, **kwargs) -> None:
-        """Register every subclass as it is defined."""
+        """Register every subclass as it is defined.
+
+        Args:
+            kwargs: Forwarded unchanged to ``super().__init_subclass__``.
+        """
         super().__init_subclass__(**kwargs)
         Validator._registry.append(cls)
 
@@ -243,6 +253,9 @@ class ContractValidator(Validator):
     def validate(self, context: ValidatorContext) -> list[Finding]:
         """Check every declared dimension and variable against the produced file.
 
+        Args:
+            context: The EXPECTED contract and ACTUAL file to compare.
+
         Returns:
             The dimension findings followed by the variable findings.
         """
@@ -265,6 +278,11 @@ class ContractValidator(Validator):
         Only presence is compared. A dimension's size varies per run (``nt`` is the reach's
         timestep count), so a contract cannot declare it.
 
+        Args:
+            report: Binds the run-invariant ``Finding`` fields for this file.
+            contract: The declared interface for this produced file (the EXPECTED side).
+            result: The read model for the produced file being checked (the ACTUAL side).
+
         Returns:
             One finding per dimension: FAIL if declared but absent, WARN if present but
             undeclared, INFO if present on both sides.
@@ -280,6 +298,11 @@ class ContractValidator(Validator):
 
         Existence is checked in both directions; the variables present on both sides are then
         handed to :meth:`_check_variable` for their structure.
+
+        Args:
+            report: Binds the run-invariant ``Finding`` fields for this file.
+            contract: The declared interface for this produced file (the EXPECTED side).
+            result: The read model for the produced file being checked (the ACTUAL side).
 
         Returns:
             A finding for every declared-but-absent variable (FAIL when required, WARN when
@@ -309,6 +332,12 @@ class ContractValidator(Validator):
         The two checks are independent, so a variable with both a wrong dtype and wrong
         dimensions reports both. Dimensions are compared as ordered tuples: ``[nx, nt]`` and
         ``(nt, nx)`` index differently for a downstream consumer and so must not match.
+
+        Args:
+            report: Binds the run-invariant ``Finding`` fields for this file.
+            name: The variable's qualified name (``group/var`` when nested).
+            contract: This variable's declared structure (the EXPECTED side).
+            result: This variable's structure as the file actually holds it (the ACTUAL side).
 
         Returns:
             One DIFFERENT/FAIL finding per disagreeing attribute, or a single PASSED/INFO
@@ -380,6 +409,9 @@ class RulesValidator(Validator):
     def validate(self, context: ValidatorContext) -> list[Finding]:
         """Check one produced file's metadata against the SoS rules.
 
+        Args:
+            context: The EXPECTED contract and ACTUAL file to compare.
+
         Returns:
             The global-attribute findings followed by the per-variable ones; empty when this
             module has no rules artifact.
@@ -404,6 +436,12 @@ class RulesValidator(Validator):
     ) -> list[Finding]:
         """Check the file's global attributes against the ones the SoS spec requires.
 
+        Args:
+            report: Binds the run-invariant ``Finding`` fields for this file.
+            rule: The global attribute names the SoS spec requires.
+            result: The read model for the produced file being checked (the ACTUAL side).
+            strict: When True, a missing attribute FAILs the run rather than WARN.
+
         Returns:
             One finding per global attribute.
         """
@@ -419,6 +457,12 @@ class RulesValidator(Validator):
         self, report: _Reporter, rules: MetadataRules, result: NetcdfResult, strict: bool
     ) -> list[Finding]:
         """Check every variable's metadata against the SoS spec, in both directions.
+
+        Args:
+            report: Binds the run-invariant ``Finding`` fields for this file.
+            rules: This module's SoS metadata rules artifact.
+            result: The read model for the produced file being checked (the ACTUAL side).
+            strict: When True, a rule violation FAILs the run rather than WARN.
 
         Returns:
             The variable-level findings, with each common variable's own findings folded in.
@@ -475,6 +519,13 @@ class RulesValidator(Validator):
     ) -> list[Finding]:
         """Compare one variable's declared attribute names against the ones the file carries.
 
+        Args:
+            report: Binds the run-invariant ``Finding`` fields for this file.
+            rule: The attribute names the SoS spec declares for this variable.
+            result: The attribute names the file actually carries for this variable.
+            var_name: This variable's qualified name (``group/var`` when nested).
+            strict: When True, a missing attribute FAILs the run rather than WARN.
+
         Returns:
             One finding per attribute, qualified as ``<variable>.<attribute>``.
         """
@@ -498,6 +549,12 @@ class RulesValidator(Validator):
         The rule comparison cannot catch these: where the spreadsheet omits an attribute too --
         as it does for ``units`` on 69 of its 147 variables -- the name is on neither side of
         the partition, so nothing is reported.
+
+        Args:
+            report: Binds the run-invariant ``Finding`` fields for this file.
+            variable: This variable's attributes, as the file carries them.
+            var_name: This variable's qualified name (``group/var`` when nested).
+            strict: When True, a missing or blank attribute FAILs the run rather than WARN.
 
         Returns:
             One finding per required attribute that is absent or blank.
@@ -529,6 +586,12 @@ class RulesValidator(Validator):
         Bounds are coerced with :func:`_numeric` first, since netCDF reports numpy scalars and a
         few spreadsheet bounds are strings such as ``'inf'``. A bound that will not coerce is
         skipped rather than guessed at.
+
+        Args:
+            report: Binds the run-invariant ``Finding`` fields for this file.
+            variable: This variable's attributes, as the file carries them.
+            var_name: This variable's qualified name (``group/var`` when nested).
+            strict: When True, an inverted range FAILs the run rather than WARN.
 
         Returns:
             A PASSED finding when the range is ordered, a DIFFERENT finding when inverted, or
@@ -576,6 +639,14 @@ class RulesValidator(Validator):
         the non-standard ``fill``, and some carry nothing. ``dtype`` is the variable's contract
         dtype token (``f8``, ``i4``, ``S1``, ``str``, ...); ``fill_values`` are the canonical
         values from the rules artifact, keyed by type name.
+
+        Args:
+            report: Binds the run-invariant ``Finding`` fields for this file.
+            variable: This variable's attributes, as the file carries them.
+            dtype: This variable's contract dtype token.
+            fill_values: The canonical fill value for each type name, from the rules artifact.
+            var_name: This variable's qualified name (``group/var`` when nested).
+            strict: When True, a non-canonical fill value FAILs the run rather than WARN.
 
         Returns:
             A PASSED finding when the declared fill value is canonical, a DIFFERENT finding when
@@ -637,6 +708,10 @@ def _partition(
     and result-against-contract comparisons are one operation rather than two traversals. A
     mapping may be passed for either side; iterating one yields its keys.
 
+    Args:
+        contract: The names the EXPECTED side declares (or a mapping keyed by them).
+        result: The names the produced file actually holds (or a mapping keyed by them).
+
     Returns:
         A ``(missing, extra, common)`` triple -- declared but absent, present but undeclared,
         and present on both sides -- each sorted so a report's output is deterministic.
@@ -652,7 +727,14 @@ def _partition(
 
 
 def _numeric(value: object) -> float | None:
-    """Return value as a float, or None when it is not numeric."""
+    """Return value as a float, or None when it is not numeric.
+
+    Args:
+        value: The value to coerce, e.g. a numpy scalar or a spreadsheet string.
+
+    Returns:
+        The value as a float, or ``None`` when it will not coerce.
+    """
     try:
         return float(value)
     except (TypeError, ValueError):
@@ -665,6 +747,10 @@ def _same_fill(actual: object, expected: object) -> bool:
     An ``S1`` fill reads back as ``b"x"`` while the artifact holds ``"x"``, so bytes decode first.
     The string branch must precede the numeric one, or ``"x"`` coerces to ``None`` and every char
     variable reports as mismatched.
+
+    Args:
+        actual: The fill value the produced file declares.
+        expected: The canonical fill value from the rules artifact.
 
     Returns:
         True when the two denote the same fill value. ``nan`` never matches, which is intended --

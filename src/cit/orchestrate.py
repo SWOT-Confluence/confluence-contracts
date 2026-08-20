@@ -36,7 +36,11 @@ class Orchestrate:
 
     @functools.cached_property
     def contracts(self) -> dict[str, Contract]:
-        """The bundled contracts, keyed by module name (loaded and validated once, then cached)."""
+        """The bundled contracts, keyed by module name (loaded and validated once, then cached).
+
+        Returns:
+            A mapping of module name to its loaded :class:`Contract`.
+        """
         contracts: dict[str, Contract] = {}
         for contract_file in find_contract_files():
             contract = Contract.model_validate(load_yaml(contract_file))
@@ -45,7 +49,12 @@ class Orchestrate:
 
     @functools.cached_property
     def rules(self) -> dict[str, MetadataRules]:
-        """The SoS metadata rules -- stubbed (empty) until ``RulesValidation`` lands in P1-15."""
+        """The SoS metadata rules artifacts, keyed by the module name they govern.
+
+        Returns:
+            A mapping of module name to its loaded :class:`MetadataRules`, empty for a module
+            with no rules artifact.
+        """
         rules: dict[str, MetadataRules] = {}
         for rules_file in find_rules_files():
             metadata_rules = MetadataRules.model_validate(load_yaml(rules_file))
@@ -75,10 +84,10 @@ class Orchestrate:
 
         Args:
             module: The module to validate (a key of :attr:`contracts`).
-            strict: When True, treat rule violations as failures (used by the P1-15 rules check).
+            strict: When True, treat SoS metadata-rule violations as failures rather than warnings.
 
         Returns:
-            The findings for this module (empty until the validators land in P1-6/P1-15).
+            The findings for this module, across every discovered validator.
         """
         findings: list[Finding] = []
         rules = self.rules.get(module)  # None when this module has no rules artifact

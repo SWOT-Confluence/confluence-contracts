@@ -1,27 +1,15 @@
 """I/O utilities: filesystem discovery and low-level file reads.
 
 The only component that touches disk on the way in. It resolves bundled package data via
-``importlib.resources`` and locates a module's produced files on the run mount, so the rest of the
-package works with paths and parsed objects rather than reading paths directly.
-
-Provides:
-
-- ``find_contract_files()`` -- the bundled contract ``.yml`` resources.
-- ``find_result_files(mount_path, filepath)`` -- produced files matching one ``Produces.filepath``
-  template under the run mount.
-- ``match_result_filename(filepath, name)`` -- the placeholder values a filename supplies, or
-  ``None`` when it does not match the template.
-- ``find_rules_files()`` -- the committed rules artifact(s) (stub until P1-15).
-- ``load_yaml(path)`` -- read a YAML file into a plain dict; the EXPECTED-side low-level reader,
-  counterpart to :mod:`cit.netcdf` on the ACTUAL side.
+``importlib.resources`` and locates a module's produced files on the run mount, so the rest of
+the package works with paths and parsed objects rather than reading paths directly.
 
 A ``Produces.filepath`` is a template whose ``{placeholder}`` segments stand for the parts that
 vary per file -- a reach id, a continent, a SWORD version. Templates carry anywhere from one
-placeholder (``flpe/momma/{reach_id}_momma.nc``) to several
-(``output/sos/{continent_id}_sword_v{number}_SOS_results.nc``), so each is compiled to an anchored
-regex rather than reduced to a glob: a glob cannot express "every placeholder" without collapsing
-them all to ``*``, which both over-matches and discards the values. Matching keeps them, so a
-caller can recover the reach id or continent a file belongs to.
+placeholder to several, so each is compiled to an anchored regex rather than reduced to a glob:
+a glob cannot express "every placeholder" without collapsing them all to ``*``, which both
+over-matches and discards the values, while a regex keeps them so a caller can recover the reach
+id or continent a file belongs to.
 """
 
 import re

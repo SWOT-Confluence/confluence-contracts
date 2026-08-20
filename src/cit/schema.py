@@ -23,12 +23,20 @@ SCHEMA_PATH = Path(__file__).resolve().parents[2] / "schema" / "contract.schema.
 
 
 def build_schema() -> dict:
-    """Return the JSON schema derived from the Contract model."""
+    """Return the JSON schema derived from the Contract model.
+
+    Returns:
+        The schema as a plain dict, straight from ``Contract.model_json_schema()``.
+    """
     return Contract.model_json_schema()
 
 
 def render_schema() -> str:
-    """Serialize the schema deterministically (byte-stable across runs)."""
+    """Serialize the schema deterministically (byte-stable across runs).
+
+    Returns:
+        The schema as indented, key-sorted JSON text, with a trailing newline.
+    """
     return json.dumps(build_schema(), indent=2, sort_keys=True) + "\n"
 
 
@@ -39,7 +47,11 @@ def write_schema() -> None:
 
 
 def check_drift() -> bool:
-    """True if the committed file matches the freshly generated output."""
+    """True if the committed file matches the freshly generated output.
+
+    Returns:
+        Whether :data:`SCHEMA_PATH` already holds the current, freshly rendered schema text.
+    """
     return SCHEMA_PATH.read_text() == render_schema()
 
 

@@ -4,27 +4,9 @@ The one layer with no local precedent in the Confluence codebase. Everything tha
 ``.nc`` file goes through here so the format details live in exactly one module, shared by
 both the reader (:mod:`cit.result`) and the contract parser (:mod:`cit.parser`).
 
-Implements (P1-3):
-
-- ``Netcdf`` -- a class wrapping one ``.nc`` file. Its ``fp`` property opens the dataset
-  lazily on first access (and reopens it if it was closed); ``close()`` is idempotent; the
-  class doubles as a context manager that closes the handle on exit.
-- ``iter_variables() -> (qualified_name, numpy_dtype, dim_names, shape)`` -- walk every
-  variable, descending into nested groups and qualifying names as ``group/var``. Returns
-  STRUCTURE only (name, dtype, dims, shape); it reads no attributes.
-- ``variable_attributes() -> dict`` -- read all attributes for every variable (including
-  ``_FillValue``), keyed by qualified name.
-- ``global_attributes() -> dict`` -- read the dataset-level (global) attributes (root only).
-- ``numpy_to_token`` -- the module-level function mapping a NetCDF-reported numpy dtype to a
-  contract dtype token (e.g. ``f8``/``f4``/``i4``/``S1``/``str``), and ``Netcdf.TOKEN_TO_NUMPY`` --
-  the class-level map back the other way, together bridging a contract's ``dtype`` string and
-  what NetCDF reports.
-
-The attribute helpers live here, not in :mod:`cit.result`, because this module is the single
-layer that touches the netCDF4 format; :mod:`cit.result` must not read netCDF4 directly and
-instead assembles its ``variable_attributes`` / ``global_attributes`` from these helpers. They are kept separate from ``iter_variables`` so a structural-only run
-does not pay to read metadata. Attribute consumers are ``RulesValidation`` (:mod:`cit.rules`)
-and ``check_non_fill`` (:mod:`cit.validation`).
+Attribute reads are split from structural iteration so a structural-only run does not pay to
+read metadata; :mod:`cit.result` must not read netCDF4 directly and instead assembles its own
+attribute dicts from the helpers here, keeping this module the sole layer that touches netCDF4.
 """
 
 from collections.abc import Iterator
@@ -55,13 +37,24 @@ class Netcdf:
 
     @property
     def fp(self) -> nc.Dataset:
-        """The open Dataset, opened on the first access and reopened if closed."""
+        """The open Dataset, opened on the first access and reopened if closed.
+
+        Returns:
+            The open ``netCDF4.Dataset`` handle for this file.
+        """
         if self._fp is None or not self._fp.isopen():
             self._fp = self._open(self._path)
         return self._fp
 
     def _open(self, path: str) -> nc.Dataset:
-        """Open the NetCDF dataset as read-only."""
+        """Open the NetCDF dataset as read-only.
+
+        Args:
+            path: Path to the ``.nc`` file to open.
+
+        Returns:
+            The opened, read-only ``netCDF4.Dataset``.
+        """
         return nc.Dataset(path, "r")
 
     def close(self) -> None:
@@ -71,15 +64,34 @@ class Netcdf:
         self._fp = None
 
     def __enter__(self) -> "Netcdf":
-        """Enter a context that guarantees a close() on exit."""
+        """Enter a context that guarantees a close() on exit.
+
+        Returns:
+            This instance.
+        """
         return self
 
     def __exit__(self, *exc: object) -> None:
-        """Close the handle when leaving the context."""
+        """Close the handle when leaving the context.
+
+        Args:
+            exc: The exception type, value, and traceback, if the block raised; unused, since
+                the handle is closed unconditionally.
+        """
         self.close()
 
     def _walk(self, group: nc.Dataset, prefix: str = "") -> Iterator[tuple[str, nc.Variable]]:
-        """Yield (qualified_name, variable) for every variable, descending into groups."""
+        """Yield (qualified_name, variable) for every variable, descending into groups.
+
+        Args:
+            group: The dataset or group to walk.
+            prefix: The qualified-name prefix accumulated from enclosing groups (e.g.
+                ``"group/"``); empty at the root.
+
+        Yields:
+            Tuples of the variable's qualified name (``group/var`` for a nested variable) and
+            the variable object itself.
+        """
         for name, var in group.variables.items():
             yield f"{prefix}{name}", var
 
@@ -87,21 +99,41 @@ class Netcdf:
             yield from self._walk(subgroup, prefix=f"{prefix}{group_name}/")
 
     def iter_variables(self) -> Iterator[tuple[str, np.dtype, tuple, tuple]]:
-        """Structure only: (qualified_name, numpy_dtype, dim_names, shape)."""
+        """Structure only: (qualified_name, numpy_dtype, dim_names, shape).
+
+        Yields:
+            Tuples of qualified name, numpy dtype, dimension names, and shape, for every
+            variable in the file. Reads no attributes.
+        """
         for name, var in self._walk(self.fp):
             yield name, var.dtype, tuple(var.dimensions), tuple(var.shape)
 
     @staticmethod
     def _attrs(obj: nc.Dataset | nc.Variable) -> dict:
-        """Read all netCDF attributes off a Dataset or Variable (incl. _FillValue)."""
+        """Read all netCDF attributes off a Dataset or Variable (incl. _FillValue).
+
+        Args:
+            obj: The dataset or variable to read attributes from.
+
+        Returns:
+            A mapping of attribute name to value.
+        """
         return {name: obj.getncattr(name) for name in obj.ncattrs()}
 
     def variable_attributes(self) -> dict[str, dict]:
-        """All attributes for every variable, keyed by qualified name."""
+        """All attributes for every variable, keyed by qualified name.
+
+        Returns:
+            A mapping of qualified variable name to its attribute dict.
+        """
         return {name: self._attrs(var) for name, var in self._walk(self.fp)}
 
     def global_attributes(self) -> dict:
-        """Dataset-level (global) attributes — root only, not per-group."""
+        """Dataset-level (global) attributes — root only, not per-group.
+
+        Returns:
+            A mapping of global attribute name to value.
+        """
         return self._attrs(self.fp)
 
     def dimensions(self) -> dict[str, int]:

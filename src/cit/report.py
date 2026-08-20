@@ -209,12 +209,12 @@ class Finding:
         results_file: The resolved produced file the finding came from, distinct from
             ``filepath``'s path template.
         scope: What kind of thing was examined (``dimension``, ``variable``, ``attribute`` or
-            ``global_attribute``), a different axis from ``validation`` and ``check``. Required,
-            so a missing value fails loudly at construction rather than grouping silently.
+            ``global_attribute``); required, so a missing value fails loudly at construction
+            rather than grouping silently.
         check: The specific question asked (see :class:`Check`), e.g. ``dtype`` vs ``dims`` for
-            two questions about the same variable. Also required, for the same reason as scope.
-        parent: The variable name an attribute-scoped finding belongs to, or ``""`` otherwise.
-            Explicit rather than inferred by splitting ``component`` on ``.``, since a
+            two questions about the same variable; required for the same reason as ``scope``.
+        parent: The variable name an attribute-scoped finding belongs to, or ``""`` otherwise;
+            explicit rather than inferred by splitting ``component`` on ``.``, since a
             variable's own name may itself contain a dot (``Qmean_momma.constrained``).
     """
 
@@ -277,9 +277,8 @@ _GRID: tuple[_Column, ...] = (
     _Column("severity", _SEVERITY_WIDTH, lambda finding: finding.status),
 )
 
-# _GRID minus its "source" column: a section already names its source in the heading, so a
-# component row inside one need not repeat it. Derived rather than hand-written, so the two
-# specs cannot drift out of sync.
+# _GRID minus its "source" column -- a section names its source in the heading already, so a
+# component row need not repeat it; derived, not hand-written, so the two specs stay in sync.
 _SECTION_GRID: tuple[_Column, ...] = tuple(column for column in _GRID if column.header != "source")
 
 # What each section heading says the source was compared against -- keyed by ValidationSource so
@@ -333,6 +332,9 @@ class Report:
 
         Kept accessible (not just internal) so a full export -- e.g. the CSV, which needs every
         occurrence rather than one deduplicated entry -- can still get at each one.
+
+        Returns:
+            A new list of every :class:`Finding` passed to the constructor.
         """
         return list(self._findings)
 
@@ -344,6 +346,9 @@ class Report:
         anything itself -- ``--strict`` promotion of metadata-rule WARNs to FAILs already
         happens at emit time in ``validation._status``, so a finding's status stays truthful at
         the point it was produced; Report only consumes what it is given.
+
+        Returns:
+            1 if any finding's status is FAIL, else 0.
         """
         return 1 if any(finding.status is FindingStatus.FAIL for finding in self._findings) else 0
 
@@ -376,6 +381,9 @@ class Report:
         One generic helper rather than a method per axis, since rendering already groups by
         module, file template, component, and attribute parent.
 
+        Args:
+            key: Maps a finding to the string to group it by (e.g. its module name).
+
         Returns:
             A dict from group key to its findings, both key order and each group's order sorted
             so rendering never depends on dict/set iteration order.
@@ -393,6 +401,9 @@ class Report:
         Unlike ``__str__`` or :attr:`deduplicated`, this is the un-deduplicated escape hatch for
         triage: every ``results_file`` a finding was seen in gets its own row. Uses only the
         stdlib ``csv`` module -- pandas/rich/tabulate are not runtime dependencies of CIT.
+
+        Args:
+            path: Where to write the CSV file; overwritten if it already exists.
         """
         fieldnames = [f.name for f in fields(Finding)]
         rows = sorted(self._findings, key=_sort_key)
@@ -410,6 +421,9 @@ class Report:
         The locked API is ``print(report)``, so rendering lives on ``__str__`` rather than a
         separate ``render()`` method; anything that varies rendering is therefore a constructor
         argument rather than a call-time one.
+
+        Returns:
+            The full report text, ready to print.
         """
         sections = [
             self._banner(),
@@ -518,6 +532,13 @@ class Report:
         own compact block (see :meth:`_render_global_attributes`) ahead of the rest of each
         file's components.
 
+        Args:
+            representatives: One deduplicated finding per distinct occurrence, all from this
+                source.
+            by_finding: Maps each representative back to its full :class:`DedupedFinding` (count
+                and files).
+            depth: The module heading's indent level.
+
         Returns:
             The rendered findings, or ``""`` if there is nothing to show.
         """
@@ -561,6 +582,16 @@ class Report:
         they differ only in heading text, findings shown, column spec, and the caller-computed
         ``indent``.
 
+        Args:
+            heading: The already-indented heading line to render first.
+            columns: The column spec both the header row and each finding row are built from.
+            findings: The findings to render, one grid row each, in the order given.
+            by_finding: Maps each finding back to its full :class:`DedupedFinding` (count and
+                files), for the files suffix and ``--show-files`` lines.
+            header: Whether to render the header row; ``False`` when a preceding block's header
+                already covers this one.
+            indent: How many indent levels to render the header and each finding row at.
+
         Returns:
             The heading, the header row (if ``header``), then one line per finding, plus a
             message line and/or ``--show-files`` lines where applicable.
@@ -590,6 +621,13 @@ class Report:
         findings) is skipped only once nothing survives that filter -- superseding the old
         all-PASSED-component rule rather than adding to it.
 
+        Args:
+            findings: This file's non-global-attribute findings, both component-level and
+                attribute-scoped.
+            by_finding: Maps each finding back to its full :class:`DedupedFinding` (count and
+                files).
+            depth: The component heading's indent level.
+
         Returns:
             One heading, one header row, and one (or two, if there is a message) lines per
             finding, for every component that is shown, with attribute findings nested beneath
@@ -611,6 +649,15 @@ class Report:
         # Ranked over both buckets, so a variable whose only failure sits in a nested attribute
         # still outranks a WARN-only variable with nothing nested at all.
         def worst_severity(component: str) -> int:
+            """Return the lowest (worst) severity rank across a component's own and nested findings.
+
+            Args:
+                component: The component name to rank, a key of ``own_by_component`` and/or
+                    ``nested_by_parent``.
+
+            Returns:
+                The lowest :data:`_SEVERITY` value across both buckets for this component.
+            """
             own_findings = own_by_component.get(component, ())
             nested_findings = nested_by_parent.get(component, ())
             return min(_SEVERITY[finding.status] for finding in (*own_findings, *nested_findings))
@@ -650,6 +697,14 @@ class Report:
         :meth:`_render_grid_block` renders them regardless). No sub-block repeats the header row
         -- the component's own header already covers the whole thing.
 
+        Args:
+            component: The variable name this block is about.
+            own: This component's own (non-attribute-scoped) findings.
+            nested: Attribute-scoped findings whose ``parent`` is this component.
+            by_finding: Maps each finding back to its full :class:`DedupedFinding` (count and
+                files).
+            depth: This component heading's indent level.
+
         Returns:
             The component's heading, header row and own rows, followed by one sub-heading and
             row group per distinct attribute, sorted by attribute name.
@@ -685,6 +740,12 @@ class Report:
         global attribute only ever produces one kind of line (an existence check against the SoS
         rules), so ``source``, ``scope`` and ``check`` are constant across the whole block and
         dropped in favour of just the attribute name, what was found, and its severity.
+
+        Args:
+            findings: This file's global-attribute-scoped findings.
+            by_finding: Maps each finding back to its full :class:`DedupedFinding` (count and
+                files).
+            depth: This block's heading indent level.
 
         Returns:
             The block's heading, header row, and one line per shown attribute -- or ``[]`` when
@@ -726,6 +787,9 @@ def _sort_key(finding: Finding) -> tuple[int, str, str, str, str, str]:
     Used both to order the findings within one group and to order deduplicated entries, so
     rendering never depends on dict/set iteration order.
 
+    Args:
+        finding: The finding to compute a sort key for.
+
     Returns:
         A tuple ordering by severity (:data:`_SEVERITY`), then module, component, scope, message
         and finally the contract's filepath template.
@@ -746,6 +810,12 @@ def _render_order(finding: Finding) -> tuple[bool, int, Check, FindingType]:
     Shared by a component's own findings and its nested attribute sub-blocks, so the two
     validators' takes on one thing never interleave arbitrarily in either place -- without
     changing :func:`_sort_key` itself, which also orders the deduplicated entries and CSV rows.
+
+    Args:
+        finding: The finding to compute a sort key for.
+
+    Returns:
+        A tuple ordering structure before metadata, then by severity, check and finding type.
     """
     return (
         finding.validation != ValidationSource.STRUCTURE,
@@ -764,12 +834,27 @@ def _attribute_heading(component: str, parent: str) -> str:
     are equal there is nothing to strip, so the whole component comes back unchanged -- the
     bounds check's bare-component finding, which the caller renders as an ordinary row rather
     than a sub-heading.
+
+    Args:
+        component: The attribute finding's own component name (e.g. ``Qmean_momma.units``).
+        parent: The variable name to strip as a prefix (e.g. ``Qmean_momma``).
+
+    Returns:
+        ``component`` with the ``"{parent}."`` prefix removed, or ``component`` unchanged when
+        it does not start with that prefix.
     """
     return component.removeprefix(f"{parent}.")
 
 
 def _section_heading(source: ValidationSource) -> str:
-    """The findings-body heading for one source, e.g. ``Structure checks -- the module contract``."""
+    """The findings-body heading for one source, e.g. ``Structure checks -- the module contract``.
+
+    Args:
+        source: The validation source to build a heading for.
+
+    Returns:
+        The heading text for that source's section.
+    """
     return f"{source.capitalize()} checks -- {_SECTION_COMPARISON[source]}"
 
 
@@ -800,6 +885,9 @@ def _checks_block() -> str:
 def _grid_header(columns: tuple[_Column, ...]) -> str:
     """Build a grid's header row from its column spec.
 
+    Args:
+        columns: The column spec to build a header row for.
+
     Returns:
         Each column's header text, left-justified to its width and separated by one space, plus
         a trailing ``files`` for the always-unwidened file-count column every grid ends with.
@@ -809,6 +897,11 @@ def _grid_header(columns: tuple[_Column, ...]) -> str:
 
 def _grid_row(finding: Finding, columns: tuple[_Column, ...], files_suffix: str) -> str:
     """Build one finding's row from the same column spec its header row used.
+
+    Args:
+        finding: The finding to render a row for.
+        columns: The column spec, matching the one used to build the header row.
+        files_suffix: The already-computed files suffix to append (see :func:`_files_suffix`).
 
     Returns:
         Each column's value, left-justified to its width and separated by one space, plus the
@@ -825,6 +918,9 @@ def _grid_continuation(columns: tuple[_Column, ...]) -> str:
     what lets the global-attribute block's narrower spec get its own continuation instead of
     inheriting the component grid's -- the defect a past round introduced.
 
+    Args:
+        columns: The column spec the grid was rendered with.
+
     Returns:
         One space per column width plus one separator per column, landing exactly where that
         grid's ``files`` column starts.
@@ -838,6 +934,9 @@ def _grid_message_offset(columns: tuple[_Column, ...]) -> str:
     A mismatch message reads more naturally under the row's own ``check``/``found`` values than
     pushed out to the files column, which a wide grid can put well past 100 characters.
 
+    Args:
+        columns: The column spec the grid was rendered with.
+
     Returns:
         One space per the first column's width, plus one separator.
     """
@@ -850,6 +949,9 @@ def _files_suffix(entry: DedupedFinding) -> str:
     A finding seen in exactly one file names that file's basename instead of the otherwise
     useless ``x1 file``; one with no file at all (e.g. a registry cross-check finding with
     nothing on disk behind it) renders no suffix.
+
+    Args:
+        entry: The deduplicated finding to describe.
 
     Returns:
         The lone file's basename if there is exactly one, ``"x<n> files"`` for more than one, or
@@ -870,6 +972,13 @@ def _files_lines(
 
     A single file is never listed here even when present -- :func:`_files_suffix` already names
     it inline, and listing it again would be a redundant one-line list under every finding.
+
+    Args:
+        entry: The deduplicated finding whose files to list.
+        max_files: How many basenames to list before truncating.
+        continuation: The already-computed indent to the files column (see
+            :func:`_grid_continuation`), so a listed basename lines up under it.
+        indent: How many indent levels to render each line at.
 
     Returns:
         One already-indented line per basename (up to ``max_files``, in ``entry.files``' sorted
