@@ -61,6 +61,13 @@ def test_check_is_required():
         Finding(**_BASE, scope="variable")
 
 
+def test_parent_defaults_to_empty_string():
+    """Parent is optional, so a non-attribute-scoped finding need not set it."""
+    finding = Finding(**_BASE, scope="variable", check=Check.EXISTS)
+
+    assert finding.parent == ""
+
+
 def test_finding_is_still_hashable():
     """Finding stays hashable with the new fields, so a report may dedupe with a Counter."""
     finding = Finding(**_BASE, scope="variable", check=Check.EXISTS)
@@ -295,24 +302,32 @@ def test_str_groups_module_then_filepath_then_component():
     assert lines[output_idx + 1].strip() == "output/sos/{continent_id}_SOS_results.nc"
 
 
-def test_nt_case_shows_passed_and_non_passed_lines_for_one_component():
-    """A component with mixed PASSED/non-PASSED findings shows both lines together.
+def test_nt_case_hides_the_passed_line_by_default_and_shows_it_with_show_passed():
+    """The momma 'nt' case: a PASSED dimension and a non-PASSED variable share a component name.
 
-    This is the momma 'nt' case: a PASSED dimension finding and a non-PASSED variable finding
-    share a component name, and both render by default -- no --show-passed needed.
+    show_passed is a per-line rule: the PASSED dimension line does not render by default even
+    though its sibling in the same component is shown, and only appears once show_passed=True.
     """
     as_dimension = _finding(component="nt", scope="dimension")
     as_variable = _finding(
         component="nt", scope="variable", type=FindingType.EXTRA, status=FindingStatus.WARN
     )
 
-    text = str(Report([as_dimension, as_variable]))
+    default_text = str(Report([as_dimension, as_variable]))
+    shown_text = str(Report([as_dimension, as_variable], show_passed=True))
 
-    nt_idx = text.splitlines().index(f"{report._INDENT * 2}nt")
+    default_lines = default_text.splitlines()
+    nt_idx = default_lines.index(f"{report._INDENT * 2}nt")
     # nt_idx + 1 is the header row; the finding lines follow it.
-    component_lines = text.splitlines()[nt_idx + 2 : nt_idx + 4]
-    assert any("dimension" in line and "PASSED" in line for line in component_lines)
-    assert any("variable" in line and "EXTRA" in line for line in component_lines)
+    default_component_lines = default_lines[nt_idx + 2 : nt_idx + 4]
+    assert not any("PASSED" in line for line in default_component_lines)
+    assert any("variable" in line and "EXTRA" in line for line in default_component_lines)
+
+    shown_lines = shown_text.splitlines()
+    shown_nt_idx = shown_lines.index(f"{report._INDENT * 2}nt")
+    shown_component_lines = shown_lines[shown_nt_idx + 2 : shown_nt_idx + 4]
+    assert any("dimension" in line and "PASSED" in line for line in shown_component_lines)
+    assert any("variable" in line and "EXTRA" in line for line in shown_component_lines)
 
 
 def test_all_passed_component_hidden_by_default():
@@ -818,3 +833,188 @@ def test_show_files_lines_align_under_the_global_attribute_block_files_column():
     continuation_line = lines[row_idx + 1]
     assert continuation_line[:files_column_start].strip() == ""
     assert continuation_line[files_column_start:].startswith("0_momma.nc")
+
+
+# --- message indent, per-line PASSED filtering, and attribute nesting ----------------------
+
+
+def test_message_renders_under_scope_in_the_component_grid():
+    """A finding's message lands under the grid's 'scope' column, not the files column."""
+    finding = _finding(
+        type=FindingType.DIFFERENT, status=FindingStatus.FAIL, message="mismatch detail"
+    )
+
+    text = str(Report([finding]))
+    lines = text.splitlines()
+
+    component_idx = lines.index(f"{report._INDENT * 2}stage")
+    header_line = lines[component_idx + 1]
+    scope_start = header_line.index("scope")
+
+    message_line = lines[component_idx + 3]
+    assert message_line[:scope_start].strip() == ""
+    assert message_line[scope_start:] == "mismatch detail"
+
+
+def test_message_renders_under_found_in_the_global_attribute_block():
+    """The narrower global-attribute spec puts a message under 'found', not under files."""
+    finding = _finding(
+        scope="global_attribute",
+        check=Check.EXISTS,
+        component="title",
+        type=FindingType.MISSING,
+        status=FindingStatus.WARN,
+        message="unexpected",
+    )
+
+    text = str(Report([finding]))
+    lines = text.splitlines()
+
+    heading_idx = lines.index(f"{report._INDENT * 2}global attributes")
+    header_line = lines[heading_idx + 1]
+    found_start = header_line.index("found")
+
+    message_line = lines[heading_idx + 3]
+    assert message_line[:found_start].strip() == ""
+    assert message_line[found_start:] == "unexpected"
+
+
+def test_passed_line_hidden_by_default_even_when_its_component_has_a_fail():
+    """A component with a FAIL and a PASSED shows only the FAIL line by default."""
+    fail = _finding(type=FindingType.DIFFERENT, status=FindingStatus.FAIL, check=Check.DTYPE)
+    passed = _finding(check=Check.DIMS)  # PASSED/INFO by default
+
+    default_body = Report([fail, passed])._render_findings()
+    shown_body = Report([fail, passed], show_passed=True)._render_findings()
+
+    assert "PASSED" not in default_body
+    assert "DIFFERENT" in default_body
+    assert "PASSED" in shown_body
+    assert "DIFFERENT" in shown_body
+
+
+def test_attribute_findings_render_nested_under_their_variable_not_as_components():
+    """An attribute finding does not render as its own top-level component."""
+    own = _finding(
+        component="nodes/time", type=FindingType.MISSING, status=FindingStatus.FAIL
+    )
+    attribute = _finding(
+        component="nodes/time.calendar",
+        scope="attribute",
+        check=Check.ATTRS,
+        type=FindingType.EXTRA,
+        status=FindingStatus.WARN,
+        parent="nodes/time",
+    )
+
+    body = Report([own, attribute])._render_findings()
+    lines = body.splitlines()
+
+    assert f"{report._INDENT * 2}nodes/time" in lines
+    assert f"{report._INDENT * 2}nodes/time.calendar" not in lines
+    assert f"{report._INDENT * 3}.calendar" in lines
+
+
+def test_bounds_case_renders_as_a_variable_level_row_not_a_sub_heading():
+    """A bare-component attribute finding (the bounds check) gets no sub-heading of its own.
+
+    ``Qmean_momma.constrained`` is the hazard case: the variable's own name contains a dot,
+    which a naive split on "." would mistake for an attribute separator.
+    """
+    bounds = _finding(
+        component="Qmean_momma.constrained",
+        scope="attribute",
+        check=Check.BOUNDS,
+        type=FindingType.DIFFERENT,
+        status=FindingStatus.WARN,
+        parent="Qmean_momma.constrained",
+    )
+
+    body = Report([bounds])._render_findings()
+    lines = body.splitlines()
+
+    assert f"{report._INDENT * 2}Qmean_momma.constrained" in lines
+    assert not any(line.strip().startswith(".") for line in lines)
+    assert any("bounds" in line and "DIFFERENT" in line for line in lines)
+
+
+def test_variable_with_no_own_findings_still_renders_heading_for_a_failing_attribute():
+    """A variable with nothing of its own still gets a heading when an attribute of it fails."""
+    attribute = _finding(
+        component="stage.units",
+        scope="attribute",
+        check=Check.REQUIRED,
+        type=FindingType.MISSING,
+        status=FindingStatus.FAIL,
+        parent="stage",
+    )
+
+    body = Report([attribute])._render_findings()
+    lines = body.splitlines()
+
+    assert f"{report._INDENT * 2}stage" in lines
+    assert f"{report._INDENT * 3}.units" in lines
+
+
+def test_variable_all_passed_including_attributes_renders_nothing():
+    """A variable whose own and attribute findings are all PASSED renders nothing by default."""
+    own = _finding(component="stage")
+    attribute = _finding(
+        component="stage.units", scope="attribute", check=Check.REQUIRED, parent="stage"
+    )
+
+    body = Report([own, attribute])._render_findings()
+
+    assert body == ""
+
+
+def test_variable_with_only_an_attribute_failure_outranks_a_warn_only_variable():
+    """A variable whose sole failure sits in a nested attribute still outranks a WARN-only one.
+
+    Component names are chosen so alphabetical order alone would put the WARN-only variable
+    first -- only severity-aware ranking over the nested bucket gets this right.
+    """
+    warn_only = _finding(
+        component="aaa_warn_only", type=FindingType.EXTRA, status=FindingStatus.WARN
+    )
+    fail_attribute = _finding(
+        component="zzz_has_fail_attr.units",
+        scope="attribute",
+        check=Check.REQUIRED,
+        type=FindingType.MISSING,
+        status=FindingStatus.FAIL,
+        parent="zzz_has_fail_attr",
+    )
+
+    body = Report([warn_only, fail_attribute])._render_findings()
+    lines = body.splitlines()
+
+    assert lines.index(f"{report._INDENT * 2}zzz_has_fail_attr") < lines.index(
+        f"{report._INDENT * 2}aaa_warn_only"
+    )
+
+
+def test_str_is_deterministic_across_runs_with_nested_attributes():
+    """Rendering with nested attribute findings is deterministic regardless of input order."""
+    own = _finding(component="nodes/time", type=FindingType.MISSING, status=FindingStatus.FAIL)
+    calendar = _finding(
+        component="nodes/time.calendar",
+        scope="attribute",
+        check=Check.ATTRS,
+        type=FindingType.EXTRA,
+        status=FindingStatus.WARN,
+        parent="nodes/time",
+    )
+    valid_min = _finding(
+        component="nodes/time.valid_min",
+        scope="attribute",
+        check=Check.ATTRS,
+        type=FindingType.EXTRA,
+        status=FindingStatus.WARN,
+        parent="nodes/time",
+    )
+
+    first = str(Report([own, calendar, valid_min]))
+    second = str(Report([valid_min, own, calendar]))
+
+    assert first == second

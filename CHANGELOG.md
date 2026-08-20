@@ -52,12 +52,15 @@ and the PR descriptions.
   if anything failed. Every line names its source (`structure` or `metadata`), scope, specific
   check, verdict and severity across a six-column grid with a header row per component, ordered
   structure before metadata so the two validators' takes on the same component never render
-  identically; global attributes render in their own compact block above a file's components; and
-  the one check CIT cannot run at all (a fill value for an unmapped dtype) reports as
-  `SKIPPED`/`REPORT` instead of a data disagreement. `--show-passed` also lists the checks that
-  agreed, `--show-files` names the files behind a finding (capped by `--max-files`), and
+  identically; global attributes render in their own compact block above a file's components; a
+  variable's attribute-level findings nest beneath it instead of rendering as separate
+  components; and the one check CIT cannot run at all (a fill value for an unmapped dtype) reports
+  as `SKIPPED`/`REPORT` instead of a data disagreement. A mismatch message sits under the grid's
+  `scope` column rather than the wider `files` column. `--show-passed` is a per-line rule -- a
+  PASSED line renders only when it is set, never merely because a sibling in the same component
+  did not pass -- `--show-files` names the files behind a finding (capped by `--max-files`), and
   `--report` and `--csv` save the text report and a full one-row-per-occurrence export (the CSV
-  header now carries the report's `scope` and `check` columns too)
+  header now carries the report's `scope`, `check` and `parent` columns too)
   ([#10](https://github.com/SWOT-Confluence/confluence-contracts/issues/10)).
 
 ### Changed

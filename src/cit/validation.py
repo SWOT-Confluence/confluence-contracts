@@ -1,26 +1,16 @@
 """Structural validator plus the report-only health checks and registry cross-check.
 
 Compares a contract (EXPECTED, :mod:`cit.contract`) against an actual file (ACTUAL,
-:mod:`cit.result`) and emits ``Finding``s. This is the core interop guarantee: a changed
-module still produces the variables/dtypes/shapes downstream consumers expect.
+:mod:`cit.result`) and emits ``Finding``s -- the core interop guarantee that a changed module
+still produces the variables/dtypes/shapes downstream consumers expect.
 
-Implements (P1-6):
-
-- :class:`Validator` -- the abstract base every check implements, with a self-populating
-  registry so :meth:`Validator.discover` can instantiate each concrete validator.
-- :class:`ValidatorContext` -- the EXPECTED/ACTUAL pair one validator run works over.
-- :class:`ContractValidator` -- the structural check. Per declared dimension and variable:
-  existence (missing+required -> FAIL, missing+optional -> WARN), dtype match, and dimension
-  match by name *and order*. An undeclared component in the file -> WARN (drift), asymmetric
-  by design. Dimension *sizes* are deliberately not compared: they vary per run, and netCDF
-  derives a variable's shape from its dimensions, so matching names in order is sufficient.
-
-Planned:
-
-- ``check_completeness`` / ``check_non_fill`` (P1-16): report-only guards against silent
-  partial or all-fill output; they never fail the run, even under ``--strict``.
-- ``cross_check(registry) -> list[Finding]`` (P1-17): a files-closed lint -- every declared
-  ``consumes`` variable must be produced by some contract, or it FAILs naming the orphan.
+:class:`Validator` is the abstract base every check implements, with a self-populating registry
+so :meth:`Validator.discover` can instantiate each one with no wiring in the orchestrator.
+:class:`ContractValidator` is the structural check: existence (missing+required FAILs,
+missing+optional WARNs), dtype, and dimension match by name *and order*. An undeclared
+component in the file WARNs rather than FAILs -- drift, not a violation, asymmetric by design.
+Dimension *sizes* are deliberately not compared: they vary per run, and netCDF derives a
+variable's shape from its dimensions, so matching names in order is sufficient.
 """
 
 import inspect
@@ -41,7 +31,7 @@ class ValidatorContext:
     Attributes:
         name: The module being validated (e.g. ``momma``), carried onto every finding.
         contract: The declared interface for one produced file (the EXPECTED side).
-        rules: The SoS metadata rules, for validators that lint attributes (P1-15).
+        rules: The SoS metadata rules, for validators that lint attributes.
         result: The read model for the produced file being checked (the ACTUAL side).
     """
 
@@ -57,9 +47,6 @@ def _status(escalate: bool) -> FindingStatus:
 
     Escalated by ``--strict`` for rule violations, and by ``required`` for contract variables.
 
-    Args:
-        escalate: Whether this finding should fail the run.
-
     Returns:
         FAIL when ``escalate``, else WARN.
     """
@@ -73,8 +60,7 @@ class _Reporter:
     Attributes:
         module_name: The module being validated (e.g. ``momma``).
         filepath: The produced file's contract path template.
-        validation: Which validation produced the finding (see :class:`ValidationSource`), so a
-            report can group by source and ``--strict`` can escalate only metadata-rule findings.
+        validation: Which validation produced the finding (see :class:`ValidationSource`).
         results_file: The resolved produced file this run is checking, set once per file from
             ``result.filepath``. Defaults to ``""`` for callers (e.g. tests) built before a
             result file is known.
@@ -94,6 +80,7 @@ class _Reporter:
         *,
         scope: str,
         check: Check,
+        parent: str = "",
     ) -> Finding:
         """Build one finding, filling in the run-invariant fields.
 
@@ -105,9 +92,8 @@ class _Reporter:
             scope: What kind of thing was examined (``dimension``, ``variable``, ``attribute``,
                 or ``global_attribute``).
             check: The specific question asked about it (see :class:`Check`).
-
-        Returns:
-            The assembled finding.
+            parent: The variable name this finding nests under in the report, for an
+                attribute-scoped finding; ``""`` (the default) for every other scope.
         """
         return Finding(
             type=finding_type,
@@ -120,6 +106,7 @@ class _Reporter:
             results_file=self.results_file,
             scope=scope,
             check=check,
+            parent=parent,
         )
 
     def partition(
@@ -132,25 +119,27 @@ class _Reporter:
         component: Callable[[str], str] = str,
         missing_status: FindingStatus | Callable[[str], FindingStatus] = FindingStatus.FAIL,
         on_common: Callable[[str], list[Finding]] | None = None,
+        parent: str = "",
     ) -> list[Finding]:
         """Emit findings for one expected-against-actual name comparison.
 
-        Every check here shares this shape -- split two sets of names, report each bucket -- so the
-        shape lives once and callers supply only what differs.
+        Every check here shares this shape -- split two sets of names, report each bucket -- so
+        the shape lives once and callers supply only what differs.
 
         Args:
             expected: The names the EXPECTED side declares.
             actual: The names the produced file actually holds.
-            scope: What kind of thing was examined (``dimension``, ``variable``, ``attribute``,
-                or ``global_attribute``), carried onto every finding this call produces.
-            check: The specific question asked about it (see :class:`Check`), also carried onto
-                every finding this call produces.
+            scope: What kind of thing was examined, carried onto every finding produced.
+            check: The specific question asked (see :class:`Check`), also carried onto every
+                finding produced.
             component: Maps a name to the finding's component, for qualifying a name under its
                 parent (e.g. an attribute under its variable).
-            missing_status: The status for a declared-but-absent name, or a callable returning one
-                per name -- used where requiredness varies per variable.
-            on_common: What to emit for a name present on both sides. Defaults to a single PASSED
-                finding; a per-item check returns its own findings instead.
+            missing_status: The status for a declared-but-absent name, or a callable returning
+                one per name -- used where requiredness varies per variable.
+            on_common: What to emit for a name present on both sides. Defaults to a single
+                PASSED finding; a per-item check returns its own findings instead.
+            parent: The variable name every finding this call produces nests under; ``""`` when
+                the comparison is not attribute-scoped.
 
         Returns:
             The missing findings, then the extra ones, then whatever ``common`` produced.
@@ -162,7 +151,12 @@ class _Reporter:
             status = missing_status(name) if callable(missing_status) else missing_status
             findings.append(
                 self.finding(
-                    FindingType.MISSING, status, component(name), scope=scope, check=check
+                    FindingType.MISSING,
+                    status,
+                    component(name),
+                    scope=scope,
+                    check=check,
+                    parent=parent,
                 )
             )
 
@@ -174,6 +168,7 @@ class _Reporter:
                     component(name),
                     scope=scope,
                     check=check,
+                    parent=parent,
                 )
             )
 
@@ -188,6 +183,7 @@ class _Reporter:
                         component(name),
                         scope=scope,
                         check=check,
+                        parent=parent,
                     )
                 ]
             )
@@ -247,9 +243,6 @@ class ContractValidator(Validator):
     def validate(self, context: ValidatorContext) -> list[Finding]:
         """Check every declared dimension and variable against the produced file.
 
-        Args:
-            context: The EXPECTED contract and ACTUAL file to compare.
-
         Returns:
             The dimension findings followed by the variable findings.
         """
@@ -272,11 +265,6 @@ class ContractValidator(Validator):
         Only presence is compared. A dimension's size varies per run (``nt`` is the reach's
         timestep count), so a contract cannot declare it.
 
-        Args:
-            report: Emits findings with this run's module, file and validation already bound.
-            contract: The declared interface for this produced file.
-            result: The read model for the produced file.
-
         Returns:
             One finding per dimension: FAIL if declared but absent, WARN if present but
             undeclared, INFO if present on both sides.
@@ -292,11 +280,6 @@ class ContractValidator(Validator):
 
         Existence is checked in both directions; the variables present on both sides are then
         handed to :meth:`_check_variable` for their structure.
-
-        Args:
-            report: Emits findings with this run's module, file and validation already bound.
-            contract: The declared interface for this produced file.
-            result: The read model for the produced file.
 
         Returns:
             A finding for every declared-but-absent variable (FAIL when required, WARN when
@@ -326,12 +309,6 @@ class ContractValidator(Validator):
         The two checks are independent, so a variable with both a wrong dtype and wrong
         dimensions reports both. Dimensions are compared as ordered tuples: ``[nx, nt]`` and
         ``(nt, nx)`` index differently for a downstream consumer and so must not match.
-
-        Args:
-            report: Emits findings with this run's module, file and validation already bound.
-            name: The variable's name.
-            contract: The variable's declared structure (the EXPECTED side).
-            result: The variable's structure as read from the file (the ACTUAL side).
 
         Returns:
             One DIFFERENT/FAIL finding per disagreeing attribute, or a single PASSED/INFO
@@ -403,9 +380,6 @@ class RulesValidator(Validator):
     def validate(self, context: ValidatorContext) -> list[Finding]:
         """Check one produced file's metadata against the SoS rules.
 
-        Args:
-            context: The rules and the ACTUAL file to check.
-
         Returns:
             The global-attribute findings followed by the per-variable ones; empty when this
             module has no rules artifact.
@@ -430,12 +404,6 @@ class RulesValidator(Validator):
     ) -> list[Finding]:
         """Check the file's global attributes against the ones the SoS spec requires.
 
-        Args:
-            report: Emits findings with this run's module, file and validation already bound.
-            rule: The required global attribute names from the rules artifact.
-            result: The read model for the produced file.
-            strict: When True, a missing required attribute fails the run.
-
         Returns:
             One finding per global attribute.
         """
@@ -451,12 +419,6 @@ class RulesValidator(Validator):
         self, report: _Reporter, rules: MetadataRules, result: NetcdfResult, strict: bool
     ) -> list[Finding]:
         """Check every variable's metadata against the SoS spec, in both directions.
-
-        Args:
-            report: Emits findings with this run's module, file and validation already bound.
-            rules: The SoS metadata rules for this produced file.
-            result: The read model for the produced file.
-            strict: When True, violations fail the run rather than warning.
 
         Returns:
             The variable-level findings, with each common variable's own findings folded in.
@@ -513,13 +475,6 @@ class RulesValidator(Validator):
     ) -> list[Finding]:
         """Compare one variable's declared attribute names against the ones the file carries.
 
-        Args:
-            report: Emits findings with this run's module, file and validation already bound.
-            rule: The attribute names the spreadsheet declares for this variable.
-            result: The attribute names the file carries for this variable.
-            var_name: The group-qualified variable name, which each finding is qualified under.
-            strict: When True, a declared-but-absent attribute fails the run.
-
         Returns:
             One finding per attribute, qualified as ``<variable>.<attribute>``.
         """
@@ -532,6 +487,7 @@ class RulesValidator(Validator):
             check=Check.ATTRS,
             component=lambda attribute: f"{var_name}.{attribute}",
             missing_status=_status(strict),
+            parent=var_name,
         )
 
     def _check_required_attributes(
@@ -539,15 +495,9 @@ class RulesValidator(Validator):
     ) -> list[Finding]:
         """Check that a variable carries every attribute the SoS spec makes mandatory.
 
-        The rule comparison cannot catch these: where the spreadsheet omits an attribute too -- as
-        it does for ``units`` on 69 of its 147 variables -- the name is on neither side of the
-        partition, so nothing is reported.
-
-        Args:
-            report: Emits findings with this run's module, file and validation already bound.
-            variable: One variable's attributes, as read from the file.
-            var_name: The group-qualified variable name, which each finding is qualified under.
-            strict: When True, a missing required attribute fails the run rather than warning.
+        The rule comparison cannot catch these: where the spreadsheet omits an attribute too --
+        as it does for ``units`` on 69 of its 147 variables -- the name is on neither side of
+        the partition, so nothing is reported.
 
         Returns:
             One finding per required attribute that is absent or blank.
@@ -565,6 +515,7 @@ class RulesValidator(Validator):
                         "required by the SoS metadata spec",
                         scope="attribute",
                         check=Check.REQUIRED,
+                        parent=var_name,
                     )
                 )
 
@@ -579,14 +530,8 @@ class RulesValidator(Validator):
         few spreadsheet bounds are strings such as ``'inf'``. A bound that will not coerce is
         skipped rather than guessed at.
 
-        Args:
-            report: Emits findings with this run's module, file and validation already bound.
-            variable: One variable's attributes, as read from the file.
-            var_name: The group-qualified variable name, carried onto the finding.
-            strict: When True, an inverted range fails the run rather than warning.
-
         Returns:
-            A PASSED finding when the range is ordered, a DIFFERENT finding when it is inverted, or
+            A PASSED finding when the range is ordered, a DIFFERENT finding when inverted, or
             ``None`` when either bound is absent or non-numeric.
         """
         minimum = _numeric(variable.get("valid_min"))
@@ -602,6 +547,7 @@ class RulesValidator(Validator):
                 var_name,
                 scope="attribute",
                 check=Check.BOUNDS,
+                parent=var_name,
             )
 
         return report.finding(
@@ -611,6 +557,7 @@ class RulesValidator(Validator):
             f"(valid_min: {minimum}) exceeds (valid_max: {maximum})",
             scope="attribute",
             check=Check.BOUNDS,
+            parent=var_name,
         )
 
     def _check_fill_value(
@@ -625,16 +572,10 @@ class RulesValidator(Validator):
         """Check a variable's declared fill value against the canonical value for its type.
 
         The first of :attr:`FILL_ATTRS` present wins, and declaring none is not a violation --
-        netCDF forbids ``_FillValue`` on VLEN types, so some variables use ``missing_value`` or the
-        non-standard ``fill``, and some carry nothing.
-
-        Args:
-            report: Emits findings with this run's module, file and validation already bound.
-            variable: One variable's attributes, as read from the file.
-            dtype: The variable's contract dtype token (``f8``, ``i4``, ``S1``, ``str``, ...).
-            fill_values: The canonical fill values from the rules artifact, keyed by type name.
-            var_name: The group-qualified variable name, carried onto the finding.
-            strict: When True, a mismatch fails the run rather than warning.
+        netCDF forbids ``_FillValue`` on VLEN types, so some variables use ``missing_value`` or
+        the non-standard ``fill``, and some carry nothing. ``dtype`` is the variable's contract
+        dtype token (``f8``, ``i4``, ``S1``, ``str``, ...); ``fill_values`` are the canonical
+        values from the rules artifact, keyed by type name.
 
         Returns:
             A PASSED finding when the declared fill value is canonical, a DIFFERENT finding when
@@ -649,9 +590,8 @@ class RulesValidator(Validator):
 
         attr_name, value = declared
 
-        # An unmapped dtype means CIT cannot check this variable -- a gap in CIT, not in the
-        # data, so this is SKIPPED/REPORT rather than a DIFFERENT/WARN data disagreement; REPORT
-        # already means never-escalated, even under --strict.
+        # An unmapped dtype means CIT cannot check this variable -- a gap in CIT, not the data,
+        # so this is SKIPPED/REPORT (never escalated) rather than a DIFFERENT/WARN disagreement.
         fill_types = self.TOKEN_TO_FILL_TYPES.get(dtype)
         if fill_types is None:
             return report.finding(
@@ -661,6 +601,7 @@ class RulesValidator(Validator):
                 f"dtype {dtype!r} has no canonical fill value; fill value not checked",
                 scope="attribute",
                 check=Check.FILL,
+                parent=var_name,
             )
 
         # Indexed, not filtered: a missing key means a malformed rules artifact
@@ -673,6 +614,7 @@ class RulesValidator(Validator):
                 f"{value!r} is canonical for dtype {dtype!r}",
                 scope="attribute",
                 check=Check.FILL,
+                parent=var_name,
             )
 
         return report.finding(
@@ -682,6 +624,7 @@ class RulesValidator(Validator):
             f"(rule fill: {expected}) and (result fill: {value!r}) for dtype {dtype!r}",
             scope="attribute",
             check=Check.FILL,
+            parent=var_name,
         )
 
 
@@ -693,10 +636,6 @@ def _partition(
     Both directions come from the same pair of set differences, so the contract-against-result
     and result-against-contract comparisons are one operation rather than two traversals. A
     mapping may be passed for either side; iterating one yields its keys.
-
-    Args:
-        contract: The names the contract declares.
-        result: The names the produced file actually holds.
 
     Returns:
         A ``(missing, extra, common)`` triple -- declared but absent, present but undeclared,
@@ -726,10 +665,6 @@ def _same_fill(actual: object, expected: object) -> bool:
     An ``S1`` fill reads back as ``b"x"`` while the artifact holds ``"x"``, so bytes decode first.
     The string branch must precede the numeric one, or ``"x"`` coerces to ``None`` and every char
     variable reports as mismatched.
-
-    Args:
-        actual: The fill value declared on the variable.
-        expected: A canonical fill value from the rules artifact.
 
     Returns:
         True when the two denote the same fill value. ``nan`` never matches, which is intended --

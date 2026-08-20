@@ -292,5 +292,6 @@ def test_csv_flag_writes_a_readable_file(contract_file, mount, tmp_path, monkeyp
         "results_file",
         "scope",
         "check",
+        "parent",
     }
     assert all(row["module_name"] == MODULE for row in rows)
