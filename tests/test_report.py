@@ -1,10 +1,12 @@
 """Tests for ``cit.report``: the ``Finding`` dataclass and the ``Report`` aggregator.
 
 Covers the P1-9.1 additions to ``Finding`` -- ``results_file`` (the resolved produced file,
-defaulted so existing callers keep working) and ``check`` (what kind of thing was examined,
+defaulted so existing callers keep working) and ``scope`` (what kind of thing was examined,
 required so every finding names it rather than silently defaulting to an empty string) -- the
-P1-9.2 ``Report``: deduplication, grouping, and the exit-code policy -- and the P1-9.3
-``Report.__str__`` rendering: banner, legend, counts line, and component-first grouping.
+P1-9.2 ``Report``: deduplication, grouping, and the exit-code policy -- the P1-9.3
+``Report.__str__`` rendering: banner, legend, counts line, and component-first grouping -- and
+the #10 six-column grid: ``scope`` renamed from ``check``, a new ``check`` label field, the
+``structure``/``metadata`` source rename, and the global-attribute block.
 """
 
 import csv
@@ -15,7 +17,7 @@ import pytest
 
 from cit import report
 from cit.contract import Contract
-from cit.report import Finding, FindingStatus, FindingType, Report
+from cit.report import Check, Finding, FindingStatus, FindingType, Report, ValidationSource
 
 _BASE = {
     "type": FindingType.PASSED,
@@ -23,42 +25,53 @@ _BASE = {
     "module_name": "momma",
     "component": "stage",
     "filepath": "flpe/momma/{reach_id}_momma.nc",
-    "validation": "contract",
+    "validation": ValidationSource.STRUCTURE,
 }
 
 
 def test_results_file_defaults_to_empty_string():
     """results_file is optional, so a caller with no resolved file yet need not pass it."""
-    finding = Finding(**_BASE, check="variable")
+    finding = Finding(**_BASE, scope="variable", check=Check.EXISTS)
 
     assert finding.results_file == ""
 
 
 def test_results_file_can_be_set():
     """results_file carries the resolved file path, distinct from the filepath template."""
-    finding = Finding(**_BASE, check="variable", results_file="flpe/momma/74267700071_momma.nc")
+    finding = Finding(
+        **_BASE,
+        scope="variable",
+        check=Check.EXISTS,
+        results_file="flpe/momma/74267700071_momma.nc",
+    )
 
     assert finding.results_file == "flpe/momma/74267700071_momma.nc"
     assert finding.results_file != finding.filepath
 
 
-def test_check_is_required():
-    """The check field has no default: every finding must name what kind of thing was examined."""
+def test_scope_is_required():
+    """The scope field has no default: every finding must name what kind of thing was examined."""
     with pytest.raises(TypeError):
-        Finding(**_BASE)
+        Finding(**_BASE, check=Check.EXISTS)
+
+
+def test_check_is_required():
+    """The check field has no default: every finding must name what question was asked."""
+    with pytest.raises(TypeError):
+        Finding(**_BASE, scope="variable")
 
 
 def test_finding_is_still_hashable():
     """Finding stays hashable with the new fields, so a report may dedupe with a Counter."""
-    finding = Finding(**_BASE, check="variable")
+    finding = Finding(**_BASE, scope="variable", check=Check.EXISTS)
 
     assert hash(finding) == hash(finding)
     assert len({finding, finding}) == 1
 
 
 def _finding(**overrides: object) -> Finding:
-    """Build a Finding from ``_BASE`` with ``check="variable"``, overridable per call."""
-    kwargs = {**_BASE, "check": "variable", **overrides}
+    """Build a Finding from ``_BASE`` with ``scope="variable"``/``check=EXISTS``, overridable."""
+    kwargs = {**_BASE, "scope": "variable", "check": Check.EXISTS, **overrides}
     return Finding(**kwargs)
 
 
@@ -101,10 +114,10 @@ def test_dedup_keeps_separate_entries_for_different_messages():
     assert len(entries) == 2
 
 
-def test_dedup_keeps_separate_entries_for_same_component_different_check():
+def test_dedup_keeps_separate_entries_for_same_component_different_scope():
     """A dimension and a variable can share a component name (e.g. 'nt') but are not duplicates."""
-    as_dimension = _finding(component="nt", check="dimension")
-    as_variable = replace(as_dimension, check="variable")
+    as_dimension = _finding(component="nt", scope="dimension")
+    as_variable = replace(as_dimension, scope="variable")
 
     entries = Report([as_dimension, as_variable]).deduplicated
 
@@ -288,15 +301,16 @@ def test_nt_case_shows_passed_and_non_passed_lines_for_one_component():
     This is the momma 'nt' case: a PASSED dimension finding and a non-PASSED variable finding
     share a component name, and both render by default -- no --show-passed needed.
     """
-    as_dimension = _finding(component="nt", check="dimension")
+    as_dimension = _finding(component="nt", scope="dimension")
     as_variable = _finding(
-        component="nt", check="variable", type=FindingType.EXTRA, status=FindingStatus.WARN
+        component="nt", scope="variable", type=FindingType.EXTRA, status=FindingStatus.WARN
     )
 
     text = str(Report([as_dimension, as_variable]))
 
     nt_idx = text.splitlines().index(f"{report._INDENT * 2}nt")
-    component_lines = text.splitlines()[nt_idx + 1 : nt_idx + 3]
+    # nt_idx + 1 is the header row; the finding lines follow it.
+    component_lines = text.splitlines()[nt_idx + 2 : nt_idx + 4]
     assert any("dimension" in line and "PASSED" in line for line in component_lines)
     assert any("variable" in line and "EXTRA" in line for line in component_lines)
 
@@ -345,8 +359,9 @@ def test_finding_with_empty_filepath_and_no_results_file_does_not_raise():
     assert "orphan_var" in text
     assert "orphan_var" in shown_text
     # No file behind the finding at all: no suffix and no list, even with show_files=True.
+    # component_idx + 1 is the header row (which itself says "files"); the finding row follows.
     component_idx = text.splitlines().index(f"{report._INDENT * 2}orphan_var")
-    assert "file" not in text.splitlines()[component_idx + 1]
+    assert "file" not in text.splitlines()[component_idx + 2]
 
 
 # --- file-name rendering (x1 file -> basename, --show-files, --max-files) -------------------
@@ -390,7 +405,7 @@ def test_show_files_lists_both_basenames_one_per_line():
     text = str(Report([seen_in_a, seen_in_b], show_files=True))
     lines = text.splitlines()
 
-    expected_prefix = f"{report._INDENT * 3}{report._CONTINUATION}"
+    expected_prefix = f"{report._INDENT * 3}{report._grid_continuation(report._GRID)}"
     assert f"{expected_prefix}a_momma.nc" in lines
     assert f"{expected_prefix}b_momma.nc" in lines
 
@@ -582,3 +597,224 @@ def test_write_csv_row_order_is_deterministic(tmp_path: Path):
     Report(list(reversed(findings))).write_csv(second_path)
 
     assert first_path.read_text() == second_path.read_text()
+
+
+# --- #10: check/scope columns, structure-before-metadata, global attributes, SKIPPED --------
+
+
+@pytest.mark.parametrize("check", list(Check))
+def test_every_check_label_renders_in_a_component_row(check):
+    """Each of the eight check labels renders in its own component's check-column row."""
+    finding = _finding(
+        scope="variable", check=check, type=FindingType.EXTRA, status=FindingStatus.WARN
+    )
+
+    body = Report([finding])._render_findings()
+
+    assert check in body
+
+
+def test_write_csv_includes_every_scope_value(tmp_path: Path):
+    """All four scopes -- including global_attribute -- round-trip through the CSV export."""
+    findings = [
+        _finding(scope="dimension", check=Check.EXISTS, component="nt"),
+        _finding(scope="variable", check=Check.DTYPE, component="stage"),
+        _finding(scope="attribute", check=Check.BOUNDS, component="stage"),
+        _finding(scope="global_attribute", check=Check.EXISTS, component="title"),
+    ]
+    csv_path = tmp_path / "report.csv"
+
+    Report(findings).write_csv(csv_path)
+
+    with csv_path.open(newline="", encoding="utf-8") as csv_file:
+        rows = list(csv.DictReader(csv_file))
+
+    assert {row["scope"] for row in rows} == {
+        "dimension",
+        "variable",
+        "attribute",
+        "global_attribute",
+    }
+
+
+def test_structure_precedes_metadata_within_a_component_regardless_of_severity():
+    """Structure sorts before metadata within a component even when metadata is more severe."""
+    metadata_fail = _finding(
+        validation=ValidationSource.METADATA,
+        scope="attribute",
+        check=Check.BOUNDS,
+        type=FindingType.DIFFERENT,
+        status=FindingStatus.FAIL,
+        component="stage",
+    )
+    structure_warn = _finding(
+        validation=ValidationSource.STRUCTURE,
+        scope="variable",
+        check=Check.EXISTS,
+        type=FindingType.EXTRA,
+        status=FindingStatus.WARN,
+        component="stage",
+    )
+
+    body = Report([metadata_fail, structure_warn])._render_findings()
+
+    structure_idx = body.index("structure")
+    metadata_idx = body.index("metadata")
+    assert structure_idx < metadata_idx
+
+
+def test_header_row_appears_once_per_shown_component():
+    """Each shown component prints its own header row, once, at the finding indent."""
+    finding_a = _finding(component="a", type=FindingType.EXTRA, status=FindingStatus.WARN)
+    finding_b = _finding(component="b", type=FindingType.EXTRA, status=FindingStatus.WARN)
+
+    body = Report([finding_a, finding_b])._render_findings()
+
+    header = f"{report._INDENT * 3}{report._grid_header(report._GRID)}"
+    assert body.count(header) == 2
+
+
+def test_fail_and_warn_missing_findings_no_longer_render_identically():
+    """A structure MISSING/FAIL and a metadata MISSING/WARN for the same variable now differ.
+
+    Before #10 both rendered as the byte-identical ``variable  MISSING  x... files``.
+    """
+    structure_missing = _finding(
+        validation=ValidationSource.STRUCTURE,
+        scope="variable",
+        check=Check.EXISTS,
+        type=FindingType.MISSING,
+        status=FindingStatus.FAIL,
+        component="observations",
+    )
+    metadata_missing = _finding(
+        validation=ValidationSource.METADATA,
+        scope="variable",
+        check=Check.EXISTS,
+        type=FindingType.MISSING,
+        status=FindingStatus.WARN,
+        component="observations",
+    )
+
+    body = Report([structure_missing, metadata_missing])._render_findings()
+    lines = [line for line in body.splitlines() if "MISSING" in line]
+
+    assert len(lines) == 2
+    assert lines[0] != lines[1]
+
+
+def test_global_attribute_block_renders_above_components_with_its_own_header():
+    """The global-attribute block appears before any component, with its own header row."""
+    global_attribute = _finding(
+        scope="global_attribute",
+        check=Check.EXISTS,
+        component="title",
+        type=FindingType.MISSING,
+        status=FindingStatus.WARN,
+    )
+    component_finding = _finding(
+        scope="variable",
+        check=Check.EXISTS,
+        component="stage",
+        type=FindingType.EXTRA,
+        status=FindingStatus.WARN,
+    )
+
+    body = Report([global_attribute, component_finding])._render_findings()
+    lines = body.splitlines()
+
+    global_heading_idx = lines.index(f"{report._INDENT * 2}global attributes")
+    stage_heading_idx = lines.index(f"{report._INDENT * 2}stage")
+    assert global_heading_idx < stage_heading_idx
+    assert "attribute" in lines[global_heading_idx + 1]
+    assert "title" in lines[global_heading_idx + 2]
+
+
+def test_global_attribute_block_omitted_when_there_are_no_global_attribute_findings():
+    """No global-attribute findings means no 'global attributes' heading at all."""
+    component_finding = _finding(
+        scope="variable",
+        check=Check.EXISTS,
+        component="stage",
+        type=FindingType.EXTRA,
+        status=FindingStatus.WARN,
+    )
+
+    body = Report([component_finding])._render_findings()
+
+    assert "global attributes" not in body
+
+
+def test_global_attribute_findings_do_not_render_as_a_component():
+    """A global attribute's component name never appears as a component heading."""
+    global_attribute = _finding(
+        scope="global_attribute",
+        check=Check.EXISTS,
+        component="title",
+        type=FindingType.MISSING,
+        status=FindingStatus.WARN,
+    )
+
+    body = Report([global_attribute])._render_findings()
+
+    assert f"{report._INDENT * 2}title" not in body.splitlines()
+
+
+def test_skipped_report_finding_renders_and_keeps_its_component_visible():
+    """A SKIPPED/REPORT finding is not PASSED, so its component shows without show_passed."""
+    skipped = _finding(type=FindingType.SKIPPED, status=FindingStatus.REPORT, component="flag")
+
+    text = str(Report([skipped]))
+
+    assert "flag" in text
+    assert "SKIPPED" in text
+    assert Report([skipped]).exit_code == 0
+
+
+def test_show_files_lines_align_under_the_grid_files_column():
+    """--show-files continuation lines start exactly where the grid's files column starts."""
+    base = _finding(type=FindingType.EXTRA, status=FindingStatus.WARN)
+    findings = [replace(base, results_file=f"{i}_momma.nc") for i in range(3)]
+
+    text = str(Report(findings, show_files=True))
+    lines = text.splitlines()
+
+    row_idx = next(i for i, line in enumerate(lines) if "x3 files" in line)
+    files_column_start = lines[row_idx].index("x3 files")
+    continuation_line = lines[row_idx + 1]
+
+    assert continuation_line[:files_column_start].strip() == ""
+    assert continuation_line[files_column_start:].startswith("0_momma.nc")
+
+
+def test_show_files_lines_align_under_the_global_attribute_block_files_column():
+    """The global-attribute block's --show-files lines land under its own files column.
+
+    Regression test: the block renders from a narrower three-column spec than the six-column
+    component grid, so its continuation indent must be derived from that narrower spec too --
+    reusing the component grid's continuation landed a file list well to the right of where this
+    block's own ``files`` header actually starts.
+    """
+    base = _finding(
+        scope="global_attribute",
+        check=Check.EXISTS,
+        component="title",
+        type=FindingType.MISSING,
+        status=FindingStatus.WARN,
+    )
+    findings = [replace(base, results_file=f"{i}_momma.nc") for i in range(3)]
+
+    text = str(Report(findings, show_files=True))
+    lines = text.splitlines()
+
+    heading_idx = lines.index(f"{report._INDENT * 2}global attributes")
+    header_line = lines[heading_idx + 1]
+    files_header_start = header_line.index("files")
+
+    row_idx = next(i for i, line in enumerate(lines) if "x3 files" in line)
+    files_column_start = lines[row_idx].index("x3 files")
+    assert files_column_start == files_header_start
+
+    continuation_line = lines[row_idx + 1]
+    assert continuation_line[:files_column_start].strip() == ""
+    assert continuation_line[files_column_start:].startswith("0_momma.nc")

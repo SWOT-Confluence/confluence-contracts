@@ -29,7 +29,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 
 from cit.contract import Produces, VariableContract
-from cit.report import Finding, FindingStatus, FindingType
+from cit.report import Check, Finding, FindingStatus, FindingType, ValidationSource
 from cit.result import NetcdfResult, VarInfo
 from cit.rules import MetadataRules
 
@@ -73,8 +73,8 @@ class _Reporter:
     Attributes:
         module_name: The module being validated (e.g. ``momma``).
         filepath: The produced file's contract path template.
-        validation: Which validation produced the finding (``contract`` or ``rule``), so a report
-            can group by check and ``--strict`` can escalate only rule findings.
+        validation: Which validation produced the finding (see :class:`ValidationSource`), so a
+            report can group by source and ``--strict`` can escalate only metadata-rule findings.
         results_file: The resolved produced file this run is checking, set once per file from
             ``result.filepath``. Defaults to ``""`` for callers (e.g. tests) built before a
             result file is known.
@@ -82,7 +82,7 @@ class _Reporter:
 
     module_name: str
     filepath: str
-    validation: str
+    validation: ValidationSource
     results_file: str = ""
 
     def finding(
@@ -92,7 +92,8 @@ class _Reporter:
         component: str,
         message: str = "",
         *,
-        check: str,
+        scope: str,
+        check: Check,
     ) -> Finding:
         """Build one finding, filling in the run-invariant fields.
 
@@ -101,8 +102,9 @@ class _Reporter:
             status: How the finding bears on the exit policy.
             component: The dimension, variable or attribute this finding is about.
             message: Optional detail, e.g. the disagreeing expected and actual values.
-            check: What kind of thing was examined (``dimension``, ``variable``, ``attribute``,
+            scope: What kind of thing was examined (``dimension``, ``variable``, ``attribute``,
                 or ``global_attribute``).
+            check: The specific question asked about it (see :class:`Check`).
 
         Returns:
             The assembled finding.
@@ -116,6 +118,7 @@ class _Reporter:
             message=message,
             validation=self.validation,
             results_file=self.results_file,
+            scope=scope,
             check=check,
         )
 
@@ -124,7 +127,8 @@ class _Reporter:
         expected: Iterable[str],
         actual: Iterable[str],
         *,
-        check: str,
+        scope: str,
+        check: Check,
         component: Callable[[str], str] = str,
         missing_status: FindingStatus | Callable[[str], FindingStatus] = FindingStatus.FAIL,
         on_common: Callable[[str], list[Finding]] | None = None,
@@ -137,8 +141,10 @@ class _Reporter:
         Args:
             expected: The names the EXPECTED side declares.
             actual: The names the produced file actually holds.
-            check: What kind of thing was examined (``dimension``, ``variable``, ``attribute``,
+            scope: What kind of thing was examined (``dimension``, ``variable``, ``attribute``,
                 or ``global_attribute``), carried onto every finding this call produces.
+            check: The specific question asked about it (see :class:`Check`), also carried onto
+                every finding this call produces.
             component: Maps a name to the finding's component, for qualifying a name under its
                 parent (e.g. an attribute under its variable).
             missing_status: The status for a declared-but-absent name, or a callable returning one
@@ -155,12 +161,20 @@ class _Reporter:
         for name in missing:
             status = missing_status(name) if callable(missing_status) else missing_status
             findings.append(
-                self.finding(FindingType.MISSING, status, component(name), check=check)
+                self.finding(
+                    FindingType.MISSING, status, component(name), scope=scope, check=check
+                )
             )
 
         for name in extra:
             findings.append(
-                self.finding(FindingType.EXTRA, FindingStatus.WARN, component(name), check=check)
+                self.finding(
+                    FindingType.EXTRA,
+                    FindingStatus.WARN,
+                    component(name),
+                    scope=scope,
+                    check=check,
+                )
             )
 
         for name in common:
@@ -169,7 +183,11 @@ class _Reporter:
                 if on_common is not None
                 else [
                     self.finding(
-                        FindingType.PASSED, FindingStatus.INFO, component(name), check=check
+                        FindingType.PASSED,
+                        FindingStatus.INFO,
+                        component(name),
+                        scope=scope,
+                        check=check,
                     )
                 ]
             )
@@ -237,7 +255,9 @@ class ContractValidator(Validator):
         """
         contract = context.contract
         result = context.result
-        report = _Reporter(context.name, contract.filepath, "contract", result.filepath)
+        report = _Reporter(
+            context.name, contract.filepath, ValidationSource.STRUCTURE, result.filepath
+        )
 
         return [
             *self._check_dimensions(report, contract, result),
@@ -261,7 +281,9 @@ class ContractValidator(Validator):
             One finding per dimension: FAIL if declared but absent, WARN if present but
             undeclared, INFO if present on both sides.
         """
-        return report.partition(contract.dimensions, result.dimensions, check="dimension")
+        return report.partition(
+            contract.dimensions, result.dimensions, scope="dimension", check=Check.EXISTS
+        )
 
     def _check_variables(
         self, report: _Reporter, contract: Produces, result: NetcdfResult
@@ -284,7 +306,8 @@ class ContractValidator(Validator):
         return report.partition(
             contract.variables,
             result.variables,
-            check="variable",
+            scope="variable",
+            check=Check.EXISTS,
             missing_status=lambda name: _status(contract.variables[name].required),
             on_common=lambda name: self._check_variable(
                 report, name, contract.variables[name], result.variables[name]
@@ -323,7 +346,8 @@ class ContractValidator(Validator):
                     FindingStatus.FAIL,
                     name,
                     f"(contract dtype: {contract.dtype}) and (result dtype: {result.dtype})",
-                    check="variable",
+                    scope="variable",
+                    check=Check.DTYPE,
                 )
             )
 
@@ -334,12 +358,19 @@ class ContractValidator(Validator):
                     FindingStatus.FAIL,
                     name,
                     f"(contract dims: {contract.dimensions}) and (result dims: {result.dims})",
-                    check="variable",
+                    scope="variable",
+                    check=Check.DIMS,
                 )
             )
 
         return findings or [
-            report.finding(FindingType.PASSED, FindingStatus.INFO, name, check="variable")
+            report.finding(
+                FindingType.PASSED,
+                FindingStatus.INFO,
+                name,
+                scope="variable",
+                check=Check.DTYPE_DIMS,
+            )
         ]
 
 
@@ -385,7 +416,9 @@ class RulesValidator(Validator):
         rules = context.rules
         result = context.result
         strict = context.strict
-        report = _Reporter(context.name, rules.filepath, "rule", result.filepath)
+        report = _Reporter(
+            context.name, rules.filepath, ValidationSource.METADATA, result.filepath
+        )
 
         return [
             *self._check_global_attributes(report, rules.global_attributes, result, strict),
@@ -407,7 +440,11 @@ class RulesValidator(Validator):
             One finding per global attribute.
         """
         return report.partition(
-            rule, result.global_attributes, check="global_attribute", missing_status=_status(strict)
+            rule,
+            result.global_attributes,
+            scope="global_attribute",
+            check=Check.EXISTS,
+            missing_status=_status(strict),
         )
 
     def _check_variables_attributes(
@@ -438,7 +475,8 @@ class RulesValidator(Validator):
         findings = report.partition(
             rule_attributes,
             result_attributes,
-            check="variable",
+            scope="variable",
+            check=Check.EXISTS,
             missing_status=_status(strict),
             on_common=lambda name: self._check_variable_attributes(
                 report, rule_attributes[name], result_attributes[name], name, strict
@@ -490,7 +528,8 @@ class RulesValidator(Validator):
         return report.partition(
             rule,
             set(result) - set(self.FILL_ATTRS),
-            check="attribute",
+            scope="attribute",
+            check=Check.ATTRS,
             component=lambda attribute: f"{var_name}.{attribute}",
             missing_status=_status(strict),
         )
@@ -524,7 +563,8 @@ class RulesValidator(Validator):
                         _status(strict),
                         f"{var_name}.{name}",
                         "required by the SoS metadata spec",
-                        check="attribute",
+                        scope="attribute",
+                        check=Check.REQUIRED,
                     )
                 )
 
@@ -557,7 +597,11 @@ class RulesValidator(Validator):
 
         if minimum <= maximum:
             return report.finding(
-                FindingType.PASSED, FindingStatus.INFO, var_name, check="attribute"
+                FindingType.PASSED,
+                FindingStatus.INFO,
+                var_name,
+                scope="attribute",
+                check=Check.BOUNDS,
             )
 
         return report.finding(
@@ -565,7 +609,8 @@ class RulesValidator(Validator):
             _status(strict),
             var_name,
             f"(valid_min: {minimum}) exceeds (valid_max: {maximum})",
-            check="attribute",
+            scope="attribute",
+            check=Check.BOUNDS,
         )
 
     def _check_fill_value(
@@ -592,9 +637,9 @@ class RulesValidator(Validator):
             strict: When True, a mismatch fails the run rather than warning.
 
         Returns:
-            A PASSED finding when the declared fill value is canonical, a DIFFERENT finding when it
-            is not or when the dtype has no canonical fill value, or ``None`` when the variable
-            declares no fill value at all.
+            A PASSED finding when the declared fill value is canonical, a DIFFERENT finding when
+            it is not, a SKIPPED/REPORT finding when the dtype has no canonical fill value to
+            check against, or ``None`` when the variable declares no fill value at all.
         """
         declared = next(
             ((name, variable[name]) for name in self.FILL_ATTRS if name in variable), None
@@ -604,15 +649,18 @@ class RulesValidator(Validator):
 
         attr_name, value = declared
 
-        # An unmapped dtype means CIT cannot check this variable
+        # An unmapped dtype means CIT cannot check this variable -- a gap in CIT, not in the
+        # data, so this is SKIPPED/REPORT rather than a DIFFERENT/WARN data disagreement; REPORT
+        # already means never-escalated, even under --strict.
         fill_types = self.TOKEN_TO_FILL_TYPES.get(dtype)
         if fill_types is None:
             return report.finding(
-                FindingType.DIFFERENT,
-                FindingStatus.WARN,  # never escalated: a gap in CIT, not in the data
+                FindingType.SKIPPED,
+                FindingStatus.REPORT,
                 f"{var_name}.{attr_name}",
                 f"dtype {dtype!r} has no canonical fill value; fill value not checked",
-                check="attribute",
+                scope="attribute",
+                check=Check.FILL,
             )
 
         # Indexed, not filtered: a missing key means a malformed rules artifact
@@ -623,7 +671,8 @@ class RulesValidator(Validator):
                 FindingStatus.INFO,
                 f"{var_name}.{attr_name}",
                 f"{value!r} is canonical for dtype {dtype!r}",
-                check="attribute",
+                scope="attribute",
+                check=Check.FILL,
             )
 
         return report.finding(
@@ -631,7 +680,8 @@ class RulesValidator(Validator):
             _status(strict),
             f"{var_name}.{attr_name}",
             f"(rule fill: {expected}) and (result fill: {value!r}) for dtype {dtype!r}",
-            check="attribute",
+            scope="attribute",
+            check=Check.FILL,
         )
 
 

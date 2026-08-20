@@ -3,7 +3,15 @@
 import pytest
 
 from cit.__main__ import build_parser, main
-from cit.report import DEFAULT_MAX_FILES, Finding, FindingStatus, FindingType, Report
+from cit.report import (
+    DEFAULT_MAX_FILES,
+    Check,
+    Finding,
+    FindingStatus,
+    FindingType,
+    Report,
+    ValidationSource,
+)
 
 
 @pytest.mark.parametrize("command", ["validate", "parse"])
@@ -76,8 +84,9 @@ def _make_two_file_stub(captured_kwargs):
         module_name="momma",
         component="stage",
         filepath="flpe/momma/{reach_id}_momma.nc",
-        validation="contract",
-        check="variable",
+        validation=ValidationSource.STRUCTURE,
+        scope="variable",
+        check=Check.EXISTS,
         results_file="a_momma.nc",
     )
     other = Finding(
@@ -86,8 +95,9 @@ def _make_two_file_stub(captured_kwargs):
         module_name="momma",
         component="stage",
         filepath="flpe/momma/{reach_id}_momma.nc",
-        validation="contract",
-        check="variable",
+        validation=ValidationSource.STRUCTURE,
+        scope="variable",
+        check=Check.EXISTS,
         results_file="b_momma.nc",
     )
 
@@ -190,8 +200,9 @@ def test_main_exits_1_when_report_holds_a_fail(monkeypatch):
         module_name="momma",
         component="stage",
         filepath="flpe/momma/{reach_id}_momma.nc",
-        validation="contract",
-        check="variable",
+        validation=ValidationSource.STRUCTURE,
+        scope="variable",
+        check=Check.EXISTS,
     )
     report = Report([finding])
 
@@ -221,8 +232,9 @@ def test_main_exits_0_when_report_has_no_fail(monkeypatch, capsys):
         module_name="momma",
         component="extra_var",
         filepath="flpe/momma/{reach_id}_momma.nc",
-        validation="contract",
-        check="variable",
+        validation=ValidationSource.STRUCTURE,
+        scope="variable",
+        check=Check.EXISTS,
     )
     report = Report([finding])
 

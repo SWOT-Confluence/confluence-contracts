@@ -219,8 +219,8 @@ def test_findings_carry_the_resolved_results_file(tmp_path):
     assert all(f.filepath == FILEPATH for f in first_findings + second_findings)
 
 
-def test_dimension_and_variable_findings_differ_in_check(validate):
-    """A dimension finding and a variable finding sharing a component name carry a different check."""
+def test_dimension_and_variable_findings_differ_in_scope(validate):
+    """A dimension finding and a variable finding sharing a component name carry a different scope."""
     contract = _contract(
         {"stage": {"dtype": "f8", "dimensions": ["nt"], "required": True}}, dimensions=["nt"]
     )
@@ -230,12 +230,12 @@ def test_dimension_and_variable_findings_differ_in_check(validate):
         {"stage": ("f8", ("nt",)), "nt": ("f8", ("nt",))},
     )
 
-    (nt_dimension,) = [f for f in _for(findings, "nt") if f.check == "dimension"]
-    (nt_variable,) = [f for f in _for(findings, "nt") if f.check == "variable"]
+    (nt_dimension,) = [f for f in _for(findings, "nt") if f.scope == "dimension"]
+    (nt_variable,) = [f for f in _for(findings, "nt") if f.scope == "variable"]
 
     assert nt_dimension.type is FindingType.PASSED
     assert nt_variable.type is FindingType.EXTRA
-    assert nt_dimension.check != nt_variable.check
+    assert nt_dimension.scope != nt_variable.scope
 
 
 def test_wrong_dimensions_message_shows_names_not_shape(validate):

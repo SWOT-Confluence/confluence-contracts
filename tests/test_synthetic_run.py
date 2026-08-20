@@ -212,6 +212,34 @@ def test_strict_flips_rule_warning_to_fail_exit_code(
     assert "title" in strict_text
 
 
+def test_structure_and_metadata_findings_reach_stdout_distinguishably(
+    contract_file, rules_file, tmp_path, monkeypatch, capsys
+):
+    """A structure finding and a metadata finding for the same run render as distinct lines.
+
+    Before #10 a contract-side and a rule-side finding with the same shape (e.g. two
+    ``variable MISSING`` lines, one FAIL, one WARN) rendered byte-identical; this drives the
+    real CLI end to end and checks the two sources are visibly labelled.
+    """
+    result_dir = tmp_path / "mnt4" / "synth"
+    result_dir.mkdir(parents=True)
+    ds = nc.Dataset(result_dir / "11111111111_synth.nc", "w")
+    ds.createDimension("nt", 3)
+    ds.createVariable("stage", "f8", ("nt",))
+    ds.createVariable("extra_var", "f8", ("nt",))  # undeclared -> structure EXTRA/WARN
+    ds.close()
+
+    exit_code = _run_cli(
+        monkeypatch, contract_file, tmp_path / "mnt4", rules_files=[rules_file]
+    )
+
+    assert exit_code == 0  # both findings are WARN-only
+    text = capsys.readouterr().out
+    finding_lines = [line for line in text.splitlines() if "WARN" in line]
+    assert any("structure" in line for line in finding_lines)
+    assert any("metadata" in line for line in finding_lines)
+
+
 def test_show_passed_reveals_all_passed_components(contract_file, mount, monkeypatch, capsys):
     """--show-passed renders the all-PASSED components the default run hides."""
     _run_cli(monkeypatch, contract_file, mount)
@@ -262,6 +290,7 @@ def test_csv_flag_writes_a_readable_file(contract_file, mount, tmp_path, monkeyp
         "validation",
         "message",
         "results_file",
+        "scope",
         "check",
     }
     assert all(row["module_name"] == MODULE for row in rows)

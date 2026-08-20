@@ -39,18 +39,25 @@ and the PR descriptions.
   so it is never hand-edited
   ([#8](https://github.com/SWOT-Confluence/confluence-contracts/issues/8)).
 - **SoS metadata-rules validator:** A second validator checks a produced file's metadata against
-  those rules — the global attributes every file must carry, the per-variable attributes such as
-  `long_name` and `units`, whether their values match the spreadsheet, and whether a variable's
-  fill value is the canonical one for its data type. Violations are reported as warnings by
-  default and become failures under `--strict`, and the first contract for the aggregated SoS
-  results file ships alongside as `contracts/output.yml`
+  those rules — the global attributes every file must carry, the per-variable attribute *names*
+  such as `long_name` and `units` the spreadsheet declares for it (not their values — the only
+  value-level checks are `valid_min`/`valid_max` ordering and canonical fill values), and whether
+  a variable's fill value is the canonical one for its data type. Violations are reported as
+  warnings by default and become failures under `--strict`, and the first contract for the
+  aggregated SoS results file ships alongside as `contracts/output.yml`
   ([#9](https://github.com/SWOT-Confluence/confluence-contracts/issues/9)).
 - **Findings report and a working `cit validate`:** `cit validate --results <mount>` now checks a
   run's files against their contracts and prints a report grouped by module, then produced file,
   then component, collapsing a finding that recurs across many files into one line and exiting 1
-  if anything failed. `--show-passed` also lists the checks that agreed, `--show-files` names the
-  files behind a finding (capped by `--max-files`), and `--report` and `--csv` save the text report
-  and a full one-row-per-occurrence export
+  if anything failed. Every line names its source (`structure` or `metadata`), scope, specific
+  check, verdict and severity across a six-column grid with a header row per component, ordered
+  structure before metadata so the two validators' takes on the same component never render
+  identically; global attributes render in their own compact block above a file's components; and
+  the one check CIT cannot run at all (a fill value for an unmapped dtype) reports as
+  `SKIPPED`/`REPORT` instead of a data disagreement. `--show-passed` also lists the checks that
+  agreed, `--show-files` names the files behind a finding (capped by `--max-files`), and
+  `--report` and `--csv` save the text report and a full one-row-per-occurrence export (the CSV
+  header now carries the report's `scope` and `check` columns too)
   ([#10](https://github.com/SWOT-Confluence/confluence-contracts/issues/10)).
 
 ### Changed

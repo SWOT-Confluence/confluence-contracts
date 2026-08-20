@@ -4,25 +4,43 @@ Defines the single ``Finding`` type that all validators emit and the ``Report`` 
 aggregates them -- kept separate from the ``Result`` read model so "a validator's output"
 and "an actual file" are never confused.
 
-``Finding`` and its enums have landed: a finding pairs a ``FindingType`` (what was found) with a
-``FindingStatus`` (how it bears on the exit code), so severity can be re-weighted -- e.g. by
-``--strict`` -- without changing what a validator reports.
+A finding has five meaningful axes, and every one of them renders: ``validation`` (which
+validator produced it -- :class:`ValidationSource`), ``scope`` (the kind of thing examined --
+dimension, variable, attribute or global attribute), ``check`` (the specific question asked --
+:class:`Check`), ``type`` (what was found -- :class:`FindingType`) and ``status`` (how severely
+the run should treat it -- :class:`FindingStatus`). Modelling all five, instead of collapsing
+several into one overloaded ``check`` string, is what lets two lines that used to render
+byte-identical (e.g. a contract's "this variable is undeclared" and the SoS rules' "this
+variable has no metadata spec", or a FAIL sitting next to a WARN) read as the different checks
+they are.
 
 ``Report`` aggregates findings, deduplicates them for display (see :attr:`Report.deduplicated`),
 groups them along an arbitrary axis (see :meth:`Report.grouped_by`), and applies the exit policy
 (see :attr:`Report.exit_code`) -- any ``FAIL`` fails the run, a ``WARN``-only or empty run
 passes, and ``REPORT`` findings never affect the exit code, even under ``--strict``.
 
-``Report.__str__`` (P1-9.3) renders that aggregation as text: a version banner, a legend, the
-summary counts line, and the findings themselves grouped **component-first** -- module, then
-produced-file template, then component, with each component's findings ordered FAIL -> WARN ->
-PASS. Grouping is component-first rather than severity-first (superseding the original plan) so
-that one variable's disagreeing and agreeing checks land together instead of scattered across
-severity sections -- see GitHub issue #10's first comment. Components are sorted by their worst
-severity, so a FAIL-bearing component still sorts before a WARN-only one; by default a component
-is shown only if at least one of its findings is not PASSED, and then *all* of its findings
-(including the PASSED ones) render together -- that adjacency is the point of the change.
-``show_passed`` additionally reveals components whose findings are all PASSED.
+``Report.__str__`` (P1-9.3, extended by #10) renders that aggregation as text: a version banner,
+a legend, the summary counts line, and the findings themselves grouped **component-first** --
+module, then produced-file template, then component, with each component's findings ordered
+FAIL -> WARN -> PASS. Grouping is component-first rather than severity-first (superseding the
+original plan) so that one variable's disagreeing and agreeing checks land together instead of
+scattered across severity sections -- see GitHub issue #10's first comment. Components are
+sorted by their worst severity, so a FAIL-bearing component still sorts before a WARN-only one;
+by default a component is shown only if at least one of its findings is not PASSED, and then
+*all* of its findings (including the PASSED ones) render together -- that adjacency is the point
+of the change. ``show_passed`` additionally reveals components whose findings are all PASSED.
+
+Within a shown component, findings render **structure before metadata**, then by severity, then
+by check and type -- so the two validators' takes on the same component never interleave
+arbitrarily (see :meth:`Report._render_components`). Every component (and the global-attribute
+block below) prints a **header row** naming its columns, built from the same column spec
+(:class:`_Column`) the finding rows themselves are built from, so the header can never drift out
+of sync with what it labels.
+
+**Global attributes get their own compact block**, above a produced file's components: a global
+attribute only ever produces one kind of line (an existence check), so ``source``/``scope``/
+``check`` are constant across the whole block and are dropped in favour of just the attribute
+name, what was found, and its severity.
 
 :meth:`Report.write_csv` (P1-9.4) exports every raw finding -- one row per occurrence, no
 deduplication -- as the triage escape hatch for the full per-file detail.
@@ -33,9 +51,9 @@ default; passing ``show_files`` also lists each distinct basename beneath the fi
 per line, capped at ``max_files`` with a trailing ``... and N more`` line when truncated -- the
 mount-scale case where dozens of files share a finding still fits on screen.
 
-A module/filepath heading is only rendered when it has at least one component beneath it, so a
-module whose components all passed (and are hidden by default) does not print a heading with
-nothing under it.
+A module/filepath heading is only rendered when it has at least one component (or global
+attribute) beneath it, so a module whose components all passed (and are hidden by default) does
+not print a heading with nothing under it.
 """
 
 import csv
@@ -51,19 +69,6 @@ from cit.contract import Contract
 
 _DISTRIBUTION_NAME = "confluence-contracts"
 
-_LEGEND = """\
-Declared = what the contract (structure) or the SoS rules (metadata) say should be there.
-Found    = what the produced file actually holds.
-
-PASSED     Declared and found, contract/rules match module file.
-MISSING    Declared, but not found in the file. Data is missing from the module file.
-EXTRA      Found in the file, but not declared. Extra data located in the module file.
-DIFFERENT  Declared and found, contract/rules do not match module file. Message indicates
-           values for both."""
-
-_CHECK_WIDTH = len("global_attribute")
-_TYPE_WIDTH = len("DIFFERENT")
-
 # Public (no leading underscore): imported across module boundaries by orchestrate.py and
 # __main__.py so the default lives in exactly one place.
 DEFAULT_MAX_FILES = 5
@@ -73,7 +78,6 @@ DEFAULT_MAX_FILES = 5
 _MIN_FILES_TO_LIST = 2
 
 _INDENT = " " * 4
-_CONTINUATION = " " * (_CHECK_WIDTH + _TYPE_WIDTH + 1)
 
 
 def _cit_version() -> str:
@@ -93,16 +97,20 @@ class FindingType(StrEnum):
     """What a check found, independent of how severely the run should treat it.
 
     Attributes:
-        MISSING: The contract declares a component the result file does not contain.
-        EXTRA: The result file contains a component the contract does not declare (drift).
-        DIFFERENT: The component exists on both sides but its structure disagrees.
-        PASSED: The component exists on both sides and every structural check agreed.
+        MISSING: The contract or rules declare a component the result file does not contain.
+        EXTRA: The result file contains a component the contract or rules do not declare (drift).
+        DIFFERENT: The component exists on both sides but its structure or metadata disagrees.
+        PASSED: The component exists on both sides and every check agreed.
+        SKIPPED: CIT could not run this check at all -- a gap in the tool, not in the data. Kept
+            last in the enum since it sits outside the found/not-found ladder the other four
+            members form.
     """
 
     MISSING = "MISSING"
     EXTRA = "EXTRA"
     DIFFERENT = "DIFFERENT"
     PASSED = "PASSED"
+    SKIPPED = "SKIPPED"
 
 
 class FindingStatus(StrEnum):
@@ -112,14 +120,66 @@ class FindingStatus(StrEnum):
         FAIL: A broken interface guarantee; fails the run.
         WARN: Drift or an absent optional component; reported without failing.
         INFO: A check that agreed; carried so a report can show what was verified.
-        REPORT: A report-only observation (e.g. a P1-16 health check) that is always shown but
-            never affects the exit code, even under ``--strict``.
+        REPORT: A report-only observation (e.g. a P1-16 health check, or a check CIT cannot run
+            at all) that is always shown but never affects the exit code, even under
+            ``--strict``.
     """
 
     FAIL = "FAIL"
     WARN = "WARN"
     INFO = "INFO"
     REPORT = "REPORT"
+
+
+class ValidationSource(StrEnum):
+    """Which validator produced a finding -- the closed vocabulary for ``Finding.validation``.
+
+    Defined once here (rather than as string literals scattered across the two ``_Reporter``
+    construction sites in :mod:`cit.validation`) so the CSV header, the report text and any
+    future validator all agree on the same two spellings.
+
+    Attributes:
+        STRUCTURE: Compared against the module's contract (``contracts/<module>.yml``).
+        METADATA: Compared against the SoS rules (``rules/sos_results_rules.yml``).
+    """
+
+    STRUCTURE = "structure"
+    METADATA = "metadata"
+
+
+class Check(StrEnum):
+    """The specific question a finding's check asked -- a closed, eight-label vocabulary.
+
+    A different axis from :class:`ValidationSource` (which validator asked) and from a finding's
+    ``scope`` (what kind of thing was examined): ``check`` names *which* question about that
+    thing was asked, so e.g. a variable's dtype check and its dims check -- two different
+    questions about the same variable -- render on distinguishable lines. Defined once here,
+    rather than as string literals scattered across the 14 sites in :mod:`cit.validation` that
+    emit one, and reused by :data:`_CHECKS_BY_SOURCE` so the legend cannot fall out of sync with
+    the vocabulary.
+
+    Attributes:
+        EXISTS: The dimension, variable or global attribute is declared/required and present, or
+            vice versa.
+        DTYPE: The variable's data type matches the one declared.
+        DIMS: The variable's dimension names, and their order, match.
+        DTYPE_DIMS: Both the dtype and dims checks agreed -- reported once instead of two PASSED
+            lines.
+        ATTRS: The variable carries the attribute names the SoS spec declares for it.
+        REQUIRED: ``long_name``, ``units`` and ``coverage_content_type`` are present and
+            non-blank.
+        BOUNDS: ``valid_min`` is not greater than ``valid_max``.
+        FILL: The declared fill value is the canonical one for the variable's data type.
+    """
+
+    EXISTS = "exists"
+    DTYPE = "dtype"
+    DIMS = "dims"
+    DTYPE_DIMS = "dtype+dims"
+    ATTRS = "attrs"
+    REQUIRED = "required"
+    BOUNDS = "bounds"
+    FILL = "fill"
 
 
 _SEVERITY = {
@@ -147,15 +207,20 @@ class Finding:
         component: The dimension or variable this finding is about.
         filepath: The contract's declared path template for the produced file (e.g.
             ``flpe/momma/{reach_id}_momma.nc``), not the resolved file on disk.
-        validation: Which validation produced the finding (``contract`` or ``rule``), so a report
-            can group by check and ``--strict`` can escalate only rule findings.
+        validation: Which validation produced the finding (``structure`` or ``metadata``, see
+            :class:`ValidationSource`), so a report can group by source and ``--strict`` can
+            escalate only metadata-rule findings.
         message: Optional detail, e.g. the disagreeing contract and result values.
         results_file: The resolved produced file the finding came from (e.g.
             ``flpe/momma/74267700071_momma.nc``), distinct from ``filepath``'s path template.
-        check: What kind of thing was examined -- ``dimension``, ``variable``, ``attribute`` or
-            ``global_attribute`` -- a different axis from ``validation`` (contract vs rule). Has
-            no default: every finding must name what it checked, so a missing value fails loudly
-            at construction rather than silently grouping unlike findings together.
+        scope: What kind of thing was examined -- ``dimension``, ``variable``, ``attribute`` or
+            ``global_attribute`` -- a different axis from ``validation`` (structure vs metadata)
+            and from ``check`` (which question was asked about it). Has no default: every
+            finding must name what it examined, so a missing value fails loudly at construction
+            rather than silently grouping unlike findings together.
+        check: The specific question the check asked (see :class:`Check`), e.g. ``dtype`` vs
+            ``dims`` for two different questions about the same variable. Also required, for the
+            same reason ``scope`` is.
     """
 
     type: FindingType
@@ -166,7 +231,8 @@ class Finding:
     validation: str
     message: str = ""
     results_file: str = ""
-    check: str = field(kw_only=True)
+    scope: str = field(kw_only=True)
+    check: Check = field(kw_only=True)
 
 
 def _sort_key(finding: Finding) -> tuple[int, str, str, str, str, str]:
@@ -179,17 +245,131 @@ def _sort_key(finding: Finding) -> tuple[int, str, str, str, str, str]:
         finding: The finding to compute an ordering key for.
 
     Returns:
-        A tuple ordering by severity (:data:`_SEVERITY`), then module, component, check, message
+        A tuple ordering by severity (:data:`_SEVERITY`), then module, component, scope, message
         and finally the contract's filepath template.
     """
     return (
         _SEVERITY[finding.status],
         finding.module_name,
         finding.component,
-        finding.check,
+        finding.scope,
         finding.message,
         finding.filepath,
     )
+
+
+# Column widths: each the longer of its header word and its widest possible value, so a header
+# row and its finding rows always agree on alignment. Kept as module-level constants (rather than
+# computed inline in _GRID) so the docstring above and a reader scanning the module can see the
+# grid's shape at a glance.
+_SOURCE_WIDTH = len("structure")
+_SCOPE_WIDTH = len("global_attribute")
+_CHECK_WIDTH = len(Check.DTYPE_DIMS)
+_FOUND_WIDTH = len(FindingType.DIFFERENT)
+_SEVERITY_WIDTH = len("severity")  # the header word "severity" outruns every status value
+
+
+@dataclass(frozen=True)
+class _Column:
+    """One column in a finding grid: its header text, width, and how to read a finding's value.
+
+    The header row and every finding row are built from the same sequence of ``_Column``s (see
+    :func:`_grid_header` and :func:`_grid_row`), so there is exactly one place that declares what
+    the columns are, how wide they are, and what order they render in -- a header row and a row
+    beneath it can never drift out of sync by hand-editing one and not the other.
+
+    Attributes:
+        header: The column's header-row text (e.g. ``"severity"``).
+        width: How many characters to left-justify the column to.
+        value: Maps a finding to the text this column renders for it.
+    """
+
+    header: str
+    width: int
+    value: Callable[[Finding], str]
+
+
+# The six-column grid every component renders: source, scope, check, found, severity, then a
+# trailing, unwidened files column appended by _grid_header/_grid_row. The global-attribute block
+# renders its own three-column variant (see Report._render_global_attributes) since source, scope
+# and check are constant there and dropped.
+_GRID: tuple[_Column, ...] = (
+    _Column("source", _SOURCE_WIDTH, lambda finding: finding.validation),
+    _Column("scope", _SCOPE_WIDTH, lambda finding: finding.scope),
+    _Column("check", _CHECK_WIDTH, lambda finding: finding.check),
+    _Column("found", _FOUND_WIDTH, lambda finding: finding.type),
+    _Column("severity", _SEVERITY_WIDTH, lambda finding: finding.status),
+)
+
+
+# Checks grouped by the validator that runs them, in render order, feeding the legend's "Checks"
+# block (see _checks_block). A tuple of (Check, description) pairs rather than a dict, since
+# "exists" means something different under each source and a dict would collapse the two.
+_CHECKS_BY_SOURCE: tuple[tuple[ValidationSource, str, tuple[tuple[Check, str], ...]], ...] = (
+    (
+        ValidationSource.STRUCTURE,
+        "compared against the module's contract (contracts/<module>.yml)",
+        (
+            (Check.EXISTS, "the dimension or variable is declared and present in the file"),
+            (Check.DTYPE, "the variable's data type matches the one declared"),
+            (Check.DIMS, "the variable's dimension names, and their order, match"),
+            (Check.DTYPE_DIMS, "both agreed -- reported once instead of two PASSED lines"),
+        ),
+    ),
+    (
+        ValidationSource.METADATA,
+        "compared against the SoS rules (rules/sos_results_rules.yml)",
+        (
+            (Check.EXISTS, "the spec covers this variable, or requires this global attribute"),
+            (Check.ATTRS, "the variable carries the attribute names the spec declares for it"),
+            (
+                Check.REQUIRED,
+                "long_name, units and coverage_content_type are present and non-blank",
+            ),
+            (Check.BOUNDS, "valid_min is not greater than valid_max"),
+            (Check.FILL, "the fill value is the canonical one for the variable's data type"),
+        ),
+    ),
+)
+
+
+def _checks_block() -> str:
+    """Build the legend's "Checks" block from :data:`_CHECKS_BY_SOURCE`.
+
+    Rendering this from the same data that names each check (rather than a hand-written block of
+    text) means a ninth check cannot be added to :class:`Check` and silently leave the legend
+    stale: the assertion below fails loudly the first time the new check is exercised, exactly
+    the same "fail loudly rather than silently" contract ``Finding.check`` itself relies on.
+
+    Returns:
+        The "Checks" heading, then one ``<source>  <what it compares against>`` line per
+        validator followed by one indented ``<check>  <description>`` line per check it runs.
+    """
+    covered = {check for _, _, checks in _CHECKS_BY_SOURCE for check, _ in checks}
+    assert covered == set(Check), "every Check must be documented in the legend"
+
+    label_width = max(len(check) for _, _, checks in _CHECKS_BY_SOURCE for check, _ in checks)
+    source_width = max(len(source) for source, _, _ in _CHECKS_BY_SOURCE) + 3
+    lines = ["Checks -- the question each line asked.", ""]
+    for source, compared_against, checks in _CHECKS_BY_SOURCE:
+        lines.append(f"{source:<{source_width}}{compared_against}")
+        lines.extend(f"  {check:<{label_width}}  {description}" for check, description in checks)
+        lines.append("")
+    return "\n".join(lines).rstrip()
+
+
+_LEGEND = f"""\
+Declared = what the contract (structure) or the SoS rules (metadata) say should be there.
+Found    = what the produced file actually holds.
+
+PASSED     Declared and found, contract/rules match module file.
+MISSING    Declared, but not found in the file. Data is missing from the module file.
+EXTRA      Found in the file, but not declared. Extra data located in the module file.
+DIFFERENT  Declared and found, contract/rules do not match module file. Message indicates
+           values for both.
+SKIPPED    CIT could not run this check -- a gap in the tool, not in the data.
+
+{_checks_block()}"""
 
 
 @dataclass(frozen=True)
@@ -263,13 +443,13 @@ class Report:
         REPORT findings are excluded from consideration entirely -- they never affect the exit
         code, not even under ``--strict``.
 
-        Report does not re-escalate anything itself: ``--strict`` promotion of rule WARNs to
-        FAILs already happens at emit time in ``validation._status``, which keeps a finding's
-        status truthful at the point it was produced. Report only consumes the status it is
-        given. Measured asymmetry from a real mount run: ``--strict`` moved 171 rule findings
-        WARN -> FAIL and left 92 untouched, because ``partition`` hardcodes ``EXTRA`` to WARN --
-        an extra attribute is drift, not a violation, and staying WARN under ``--strict`` reflects
-        that.
+        Report does not re-escalate anything itself: ``--strict`` promotion of metadata-rule
+        WARNs to FAILs already happens at emit time in ``validation._status``, which keeps a
+        finding's status truthful at the point it was produced. Report only consumes the status
+        it is given. Measured asymmetry from a real mount run: ``--strict`` moved 171 rule
+        findings WARN -> FAIL and left 92 untouched, because ``partition`` hardcodes ``EXTRA`` to
+        WARN -- an extra attribute is drift, not a violation, and staying WARN under ``--strict``
+        reflects that.
         """
         return 1 if any(finding.status is FindingStatus.FAIL for finding in self._findings) else 0
 
@@ -423,10 +603,10 @@ class Report:
         """Render the findings, grouped module -> produced-file template -> component.
 
         Deduplicated entries are used throughout, so each rendered line stands for however many
-        raw occurrences it collapsed (see :attr:`deduplicated`). Components are ranked by their
-        worst severity so a FAIL-bearing component sorts before a WARN-only one, then by name;
-        by default only components with at least one non-PASSED finding are shown, but every
-        finding for a shown component (PASSED included) renders together.
+        raw occurrences it collapsed (see :attr:`deduplicated`). Within each produced-file group,
+        global-attribute findings are pulled out into their own compact block (see
+        :meth:`_render_global_attributes`) before the remaining findings render as components
+        exactly as before.
 
         Returns:
             The rendered findings, or ``""`` if there is nothing to show.
@@ -445,16 +625,59 @@ class Report:
             module_lines: list[str] = []
             file_groups = Report(module_findings).grouped_by(lambda finding: finding.filepath)
             for filepath, file_findings in file_groups.items():
-                component_lines = self._render_components(file_findings, by_finding)
-                if not component_lines:
+                global_attributes = [f for f in file_findings if f.scope == "global_attribute"]
+                components = [f for f in file_findings if f.scope != "global_attribute"]
+                file_lines = [
+                    *self._render_global_attributes(global_attributes, by_finding),
+                    *self._render_components(components, by_finding),
+                ]
+                if not file_lines:
                     continue
                 module_lines.append(f"{_INDENT}{filepath}")
-                module_lines.extend(component_lines)
+                module_lines.extend(file_lines)
             if not module_lines:
                 continue
             lines.append(module_name)
             lines.extend(module_lines)
         return "\n".join(lines)
+
+    def _render_grid_block(
+        self,
+        heading: str,
+        columns: tuple[_Column, ...],
+        findings: list[Finding],
+        by_finding: dict[Finding, DedupedFinding],
+    ) -> list[str]:
+        """Render one heading, its header row, then one (or more) lines per finding.
+
+        The shared "heading, header row, rows" shape behind both a component (called once per
+        component, with that component's own findings) and the global-attribute block (called
+        once per produced file, with every surviving attribute finding flattened into it) --
+        the two differ only in the heading text, which findings are shown, and the column spec.
+
+        Args:
+            heading: The already-indented heading line (a component name, or "global
+                attributes").
+            columns: The column spec (see :class:`_Column`), shared by the header row and every
+                finding row so they cannot drift out of sync.
+            findings: The findings to render beneath the heading, already in display order.
+            by_finding: Maps a representative finding back to its :class:`DedupedFinding`, for
+                the occurrence count and file list a plain ``Finding`` no longer carries.
+
+        Returns:
+            The heading, the header row, then one line per finding, plus a message line and/or
+            ``--show-files`` lines where applicable.
+        """
+        continuation = _grid_continuation(columns)
+        lines = [heading, f"{_INDENT * 3}{_grid_header(columns)}"]
+        for finding in findings:
+            entry = by_finding[finding]
+            lines.append(f"{_INDENT * 3}{_grid_row(finding, columns, _files_suffix(entry))}")
+            if finding.message:
+                lines.append(f"{_INDENT * 3}{continuation}{finding.message}")
+            if self._show_files:
+                lines.extend(_files_lines(entry, self._max_files, continuation))
+        return lines
 
     def _render_components(
         self, findings: list[Finding], by_finding: dict[Finding, DedupedFinding]
@@ -462,13 +685,14 @@ class Report:
         """Render one produced file's components, ordered by worst severity then name.
 
         Args:
-            findings: The deduplicated, representative findings for one module/filepath group.
+            findings: The deduplicated, representative findings for one module/filepath group,
+                with any global-attribute findings already pulled out by the caller.
             by_finding: Maps a representative finding back to its :class:`DedupedFinding` (for
                 the occurrence count and file list a plain ``Finding`` no longer carries).
 
         Returns:
-            One heading line plus one (or two, if there is a message) lines per finding, for
-            every component that is shown -- skipping PASSED-only components unless
+            One heading, one header row, and one (or two, if there is a message) lines per
+            finding, for every component that is shown -- skipping PASSED-only components unless
             ``show_passed`` was set.
         """
         component_groups = Report(findings).grouped_by(lambda finding: finding.component)
@@ -482,19 +706,120 @@ class Report:
             all_passed = all(f.type == FindingType.PASSED for f in component_findings)
             if all_passed and not self._show_passed:
                 continue
-            lines.append(f"{_INDENT * 2}{component}")
-            for finding in component_findings:
-                entry = by_finding[finding]
-                line = (
-                    f"{_INDENT * 3}{finding.check:<{_CHECK_WIDTH}} {finding.type:<{_TYPE_WIDTH}} "
-                    f"{_files_suffix(entry)}"
+            # grouped_by already sorted by severity; re-sort so structure precedes metadata
+            # within a component, tiebroken by check and type, without changing _sort_key
+            # itself (which also orders the deduplicated entries and the CSV rows).
+            ordered_findings = sorted(
+                component_findings,
+                key=lambda finding: (
+                    finding.validation != ValidationSource.STRUCTURE,
+                    _SEVERITY[finding.status],
+                    finding.check,
+                    finding.type,
+                ),
+            )
+            lines.extend(
+                self._render_grid_block(
+                    f"{_INDENT * 2}{component}", _GRID, ordered_findings, by_finding
                 )
-                lines.append(line.rstrip())
-                if finding.message:
-                    lines.append(f"{_INDENT * 3}{_CONTINUATION}{finding.message}")
-                if self._show_files:
-                    lines.extend(_files_lines(entry, self._max_files))
+            )
         return lines
+
+    def _render_global_attributes(
+        self, findings: list[Finding], by_finding: dict[Finding, DedupedFinding]
+    ) -> list[str]:
+        """Render one produced file's global attributes as a single compact block.
+
+        A global attribute only ever produces one kind of line (an existence check against the
+        SoS rules), so ``source``, ``scope`` and ``check`` are constant across the whole block --
+        this drops them in favour of just the attribute name, what was found, and its severity,
+        rather than rendering the full six-column grid (and a header row) once per attribute.
+
+        Args:
+            findings: The global-attribute findings for one produced file (``scope ==
+                "global_attribute"``); already isolated by the caller.
+            by_finding: Maps a representative finding back to its :class:`DedupedFinding`.
+
+        Returns:
+            The block's heading, header row, and one line per shown attribute -- or ``[]`` when
+            there are no global-attribute findings at all, or every one of them passed and
+            ``show_passed`` is not set, matching the dangling-heading rule components already
+            follow.
+        """
+        if not findings:
+            return []
+
+        groups = Report(findings).grouped_by(lambda finding: finding.component)
+        shown = [
+            finding
+            for component_findings in groups.values()
+            if self._show_passed
+            or not all(f.type == FindingType.PASSED for f in component_findings)
+            for finding in component_findings
+        ]
+        if not shown:
+            return []
+
+        attribute_width = max(len("attribute"), *(len(finding.component) for finding in shown))
+        columns = (
+            _Column("attribute", attribute_width, lambda finding: finding.component),
+            _Column("found", _FOUND_WIDTH, lambda finding: finding.type),
+            _Column("severity", _SEVERITY_WIDTH, lambda finding: finding.status),
+        )
+        return self._render_grid_block(
+            f"{_INDENT * 2}global attributes", columns, shown, by_finding
+        )
+
+
+def _grid_header(columns: tuple[_Column, ...]) -> str:
+    """Build a grid's header row from its column spec.
+
+    Args:
+        columns: The column spec to render (see :class:`_Column`).
+
+    Returns:
+        Each column's header text, left-justified to its width and separated by one space, plus
+        a trailing ``files`` for the always-unwidened file-count column every grid ends with.
+    """
+    return " ".join(f"{column.header:<{column.width}}" for column in columns) + " files"
+
+
+def _grid_row(finding: Finding, columns: tuple[_Column, ...], files_suffix: str) -> str:
+    """Build one finding's row from the same column spec its header row used.
+
+    Args:
+        finding: The finding to render.
+        columns: The column spec (see :class:`_Column`), identical to the one passed to the
+            header row this line renders beneath.
+        files_suffix: How many/which files the finding was seen in (see :func:`_files_suffix`).
+
+    Returns:
+        Each column's value, left-justified to its width and separated by one space, plus the
+        files suffix -- trailing whitespace stripped when there is no suffix to show.
+    """
+    prefix = " ".join(f"{column.value(finding):<{column.width}}" for column in columns)
+    return f"{prefix} {files_suffix}".rstrip()
+
+
+def _grid_continuation(columns: tuple[_Column, ...]) -> str:
+    """Compute a grid's continuation indent from the same column spec it was rendered with.
+
+    A message line and a --show-files basename both continue beneath the files column, so they
+    must be indented to wherever that grid's files column actually starts -- which depends on
+    the column spec being rendered, not on the six-column component grid specifically. Deriving
+    it from ``columns`` here (rather than reading a single module-level constant sized for one
+    grid) is what lets the global-attribute block's narrower, three-column spec get its own,
+    narrower continuation instead of inheriting the component grid's.
+
+    Args:
+        columns: The column spec the grid was rendered from (see :func:`_grid_header`).
+
+    Returns:
+        One space per column width plus one separator per column -- the same arithmetic
+        :func:`_grid_header`/:func:`_grid_row` produce by construction, so a continuation line
+        lands exactly where that grid's ``files`` column starts.
+    """
+    return " " * (sum(column.width for column in columns) + len(columns))
 
 
 def _files_suffix(entry: DedupedFinding) -> str:
@@ -520,7 +845,7 @@ def _files_suffix(entry: DedupedFinding) -> str:
     return f"x{len(real_files)} files"
 
 
-def _files_lines(entry: DedupedFinding, max_files: int) -> list[str]:
+def _files_lines(entry: DedupedFinding, max_files: int, continuation: str) -> list[str]:
     """Render the indented basenames to list beneath a multi-file finding, capped and sorted.
 
     A single file is never listed here even when present -- :func:`_files_suffix` already names
@@ -529,6 +854,9 @@ def _files_lines(entry: DedupedFinding, max_files: int) -> list[str]:
     Args:
         entry: The deduplicated finding whose files to list.
         max_files: How many basenames to render before truncating.
+        continuation: The indent to render each basename at, matching the grid's files column
+            (see :func:`_grid_continuation`) -- the caller's column spec, not a fixed constant,
+            decides this.
 
     Returns:
         One already-indented line per basename (up to ``max_files``, in ``entry.files``' sorted
@@ -540,10 +868,10 @@ def _files_lines(entry: DedupedFinding, max_files: int) -> list[str]:
         return []
 
     shown = real_files[:max_files]
-    lines = [f"{_INDENT * 3}{_CONTINUATION}{Path(f).name}" for f in shown]
+    lines = [f"{_INDENT * 3}{continuation}{Path(f).name}" for f in shown]
     remaining = len(real_files) - len(shown)
     if remaining:
         lines.append(
-            f"{_INDENT * 3}{_CONTINUATION}... and {remaining} more (use --csv for the full list)"
+            f"{_INDENT * 3}{continuation}... and {remaining} more (use --csv for the full list)"
         )
     return lines
