@@ -5,9 +5,9 @@
 through :class:`cit.result.NetcdfResult` (ACTUAL side) lazily -- opening, checking, and closing one
 file at a time so peak memory stays at a single result regardless of how many were produced.
 
-The per-file comparison (``validate``) and the aggregate ``run`` are included for context; the
-validators they call (``ResultsValidation`` P1-6, ``RulesValidation`` P1-15) and ``Report`` (P1-8)
-land in later issues, so for now they stream but produce no findings.
+``run`` aggregates every module's findings into a single :class:`~cit.report.Report`, passing
+along :attr:`contracts` so the rendered report's banner can show each module's version, branch,
+and commit.
 """
 
 import functools
@@ -15,7 +15,7 @@ from collections.abc import Iterable, Iterator
 
 from cit.contract import Contract, Produces
 from cit.data import find_contract_files, find_result_files, find_rules_files, load_yaml
-from cit.report import Finding, Report
+from cit.report import DEFAULT_MAX_FILES, Finding, Report, ValidationSource
 from cit.result import NetcdfResult
 from cit.rules import MetadataRules
 from cit.validation import Validator, ValidatorContext
@@ -36,7 +36,11 @@ class Orchestrate:
 
     @functools.cached_property
     def contracts(self) -> dict[str, Contract]:
-        """The bundled contracts, keyed by module name (loaded and validated once, then cached)."""
+        """The bundled contracts, keyed by module name (loaded and validated once, then cached).
+
+        Returns:
+            A mapping of module name to its loaded :class:`Contract`.
+        """
         contracts: dict[str, Contract] = {}
         for contract_file in find_contract_files():
             contract = Contract.model_validate(load_yaml(contract_file))
@@ -45,7 +49,12 @@ class Orchestrate:
 
     @functools.cached_property
     def rules(self) -> dict[str, MetadataRules]:
-        """The SoS metadata rules -- stubbed (empty) until ``RulesValidation`` lands in P1-15."""
+        """The SoS metadata rules artifacts, keyed by the module name they govern.
+
+        Returns:
+            A mapping of module name to its loaded :class:`MetadataRules`, empty for a module
+            with no rules artifact.
+        """
         rules: dict[str, MetadataRules] = {}
         for rules_file in find_rules_files():
             metadata_rules = MetadataRules.model_validate(load_yaml(rules_file))
@@ -75,10 +84,10 @@ class Orchestrate:
 
         Args:
             module: The module to validate (a key of :attr:`contracts`).
-            strict: When True, treat rule violations as failures (used by the P1-15 rules check).
+            strict: When True, treat SoS metadata-rule violations as failures rather than warnings.
 
         Returns:
-            The findings for this module (empty until the validators land in P1-6/P1-15).
+            The findings for this module, across every discovered validator.
         """
         findings: list[Finding] = []
         rules = self.rules.get(module)  # None when this module has no rules artifact
@@ -89,25 +98,41 @@ class Orchestrate:
                     findings.extend(validator.validate(ctx))
         return findings
 
-    def run(self, strict: bool = False, modules: Iterable[str] | None = None) -> Report:
+    def run(
+        self,
+        strict: bool = False,
+        modules: Iterable[str] | None = None,
+        *,
+        show_passed: bool = False,
+        show_files: bool = False,
+        max_files: int = DEFAULT_MAX_FILES,
+        checks: ValidationSource | None = None,
+    ) -> Report:
         """Validate every module (or a given subset) and aggregate a single report.
 
         Args:
             strict: When True, rule violations fail the run.
             modules: Modules to validate; defaults to every loaded contract.
+            show_passed: When True, the rendered report also shows components whose findings
+                are all PASSED (see :class:`cit.report.Report`).
+            show_files: When True, the rendered report also lists the result-file basenames
+                behind a multi-file finding (see :class:`cit.report.Report`).
+            max_files: How many basenames to list per finding when ``show_files`` is set.
+            checks: Restrict the rendered report to one :class:`~cit.report.ValidationSource`'s
+                section (see :class:`cit.report.Report`); passed straight through unvalidated.
 
         Returns:
-            A :class:`Report` aggregating the findings across all validated modules.
+            A :class:`Report` aggregating the findings across all validated modules, carrying
+            :attr:`contracts` so its banner can show each module's version/branch/commit.
         """
-        modules = modules or self.contracts.keys()
+        modules = list(modules) if modules is not None else list(self.contracts.keys())
         findings = [finding for module in modules for finding in self.validate(module, strict)]
-        return Report(findings)
-
-
-if __name__ == "__main__":
-    mount = "/Users/ntebaldi/Documents/workspace/confluence/data/runs/end_to_end_mnt"
-    orchestrate = Orchestrate(mount)
-    # for result in orchestrate.iter_results("momma"):
-    #    print(result.variables)
-    #    print()
-    orchestrate.run()
+        contracts = {name: self.contracts[name] for name in modules}
+        return Report(
+            findings,
+            contracts,
+            show_passed=show_passed,
+            show_files=show_files,
+            max_files=max_files,
+            checks=checks,
+        )

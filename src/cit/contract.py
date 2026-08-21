@@ -1,24 +1,13 @@
 """Pydantic v2 models describing a module contract (the EXPECTED side).
 
-These models are the in-memory representation of a ``contracts/<module>.yml`` file:
-the declared interface a Confluence module promises to produce. They are the source
-of truth from which the committed JSON Schema is derived (see :mod:`cit.schema`).
+These models are the in-memory representation of a ``contracts/<module>.yml`` file: the
+declared interface a Confluence module promises to produce, and the source from which the
+committed JSON Schema is derived (see :mod:`cit.schema`).
 
-This module holds the **contract** models only; the models describing the generated SoS
-metadata-rules artifact live in :mod:`cit.rules`. The two are kept apart because they
-answer different questions and carry different tolerances -- a contract is hand-reviewed
-and strictly typed, while a rules artifact is machine-generated from a spreadsheet and
-must tolerate sparse and irregular values.
-
-Classes:
-
-- ``Contract`` -- top-level document: module, confluence version, and source provenance.
-- ``ModuleContract`` -- the module's name plus what it ``produces`` and ``consumes``.
-- ``Produces`` -- one output file: path template, dimensions, and variables.
-- ``Consumes`` -- inputs a module reads (feeds the consumes/produces cross-check).
-- ``VariableContract`` -- one variable's structure: dtype, dimensions, required.
-- ``VariableAttrs`` -- SoS metadata attributes linted by :mod:`cit.rules`.
-- ``Source`` -- provenance: repo, github_username, branch, commit, image_tag.
+This module holds the **contract** models only; the generated SoS metadata-rules artifact's
+models live in :mod:`cit.rules`. They are kept apart because a contract is hand-reviewed and
+strictly typed, while a rules artifact is machine-generated from a spreadsheet and must
+tolerate sparse and irregular values.
 
 All models use ``extra="forbid"`` so an unexpected key is an error, not a silent typo.
 """
@@ -81,7 +70,11 @@ class VariableAttrs(_Base):
 
     @model_validator(mode="after")
     def _check_bounds(self) -> VariableAttrs:
-        """Reject a variable whose valid_min exceeds valid_max."""
+        """Reject a variable whose valid_min exceeds valid_max.
+
+        Returns:
+            This instance, unchanged, once the bounds check passes.
+        """
         if (
             self.valid_min is not None
             and self.valid_max is not None

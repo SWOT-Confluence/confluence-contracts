@@ -18,7 +18,7 @@ import netCDF4 as nc
 import pytest
 
 from cit.contract import Produces
-from cit.report import FindingStatus, FindingType
+from cit.report import FindingStatus, FindingType, ValidationSource
 from cit.result import NetcdfResult
 from cit.rules import MetadataRules
 from cit.validation import (
@@ -82,7 +82,7 @@ def _rules(variable_attributes: dict | None = None, global_attributes: list | No
 @pytest.fixture
 def reporter():
     """A _Reporter bound to this module and file, as a validator run would build."""
-    return _Reporter(MODULE, FILEPATH, "rule")
+    return _Reporter(MODULE, FILEPATH, ValidationSource.METADATA)
 
 
 @pytest.fixture
@@ -309,23 +309,28 @@ def test_char_fill_compares_across_bytes(reporter):
     assert finding.type is FindingType.PASSED
 
 
-def test_unmapped_dtype_is_reported_not_skipped(reporter):
-    """A dtype with no canonical fill says so, rather than looking like an unchecked VLEN."""
+def test_unmapped_dtype_is_reported_as_skipped(reporter):
+    """A dtype with no canonical fill says so as SKIPPED, rather than as a data disagreement."""
     finding = RulesValidator()._check_fill_value(
         reporter, {"_FillValue": 1}, "u1", FILL_VALUES, "postdiagnostics/flag", False
     )
 
-    assert finding.type is FindingType.DIFFERENT
+    assert finding.type is FindingType.SKIPPED
     assert "no canonical fill value" in finding.message
 
 
 def test_unmapped_dtype_is_never_escalated(reporter):
-    """An unmodelled dtype is a gap in CIT, not in the data, so --strict leaves it a warning."""
+    """An unmodelled dtype is a gap in CIT, not in the data, so --strict never escalates it.
+
+    SKIPPED/REPORT already means never-escalated -- not because ``--strict`` was consulted and
+    declined, but because REPORT is not part of the pass/fail/warn ladder ``--strict`` promotes
+    within at all.
+    """
     finding = RulesValidator()._check_fill_value(
         reporter, {"_FillValue": 1}, "u1", FILL_VALUES, "postdiagnostics/flag", True
     )
 
-    assert finding.status is FindingStatus.WARN
+    assert finding.status is FindingStatus.REPORT
 
 
 def test_fill_types_cover_the_dtype_vocabulary():

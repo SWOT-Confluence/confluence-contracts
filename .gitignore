@@ -6,3 +6,7 @@
 .beads/proxieddb/
 __pycache__/
 .beads.gate.lock
+
+# Package outputs
+findings.csv
+report.txt
