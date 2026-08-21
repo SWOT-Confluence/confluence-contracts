@@ -1,13 +1,19 @@
-"""Streaming orchestrator: load contracts, then validate produced results one file at a time.
+"""Orchestrator: own the bundled resources, then drive each ``cit`` operation over them.
 
-``Orchestrate`` ties the pieces together for a validation run. It loads the bundled contracts
-(EXPECTED side) once, discovers a module's produced files via :mod:`cit.data`, and streams them
-through :class:`cit.result.NetcdfResult` (ACTUAL side) lazily -- opening, checking, and closing one
-file at a time so peak memory stays at a single result regardless of how many were produced.
+``Orchestrate`` is the single layer between the CLI and the domain models. It loads the bundled
+resources -- contracts (EXPECTED side) and SoS metadata-rules artifacts -- once, caching each, and
+exposes one method per ``cit`` subcommand that works from them. Resource loading lives here rather
+than in :mod:`cit.__main__` so that "which contract/rules artifact applies to this module" is
+answered in exactly one place, testable without argparse.
 
-``run`` aggregates every module's findings into a single :class:`~cit.report.Report`, passing
-along :attr:`contracts` so the rendered report's banner can show each module's version, branch,
-and commit.
+:meth:`Orchestrate.validate` discovers a module's produced files via :mod:`cit.data` and streams
+them through :class:`cit.result.NetcdfResult` (ACTUAL side) lazily -- opening, checking, and closing
+one file at a time so peak memory stays at a single result regardless of how many were produced --
+then aggregates every module's findings into a single :class:`~cit.report.Report`, passing along
+:attr:`contracts` so the rendered banner can show each module's version, branch, and commit.
+
+The run mount is an argument to :meth:`validate`, not constructor state: it is specific to that one
+operation, and ``cit parse`` (P1-10) reads a single designated file rather than a mount tree.
 """
 
 import functools
@@ -22,17 +28,19 @@ from cit.validation import Validator, ValidatorContext
 
 
 class Orchestrate:
-    """Drive a validation run: load contracts and stream produced results against them."""
+    """Own the bundled contracts and rules artifacts, and drive each ``cit`` operation over them."""
 
-    def __init__(self, data_mount: str) -> None:
-        """Store the run mount root; nothing is loaded until a property is accessed.
+    @functools.cached_property
+    def _validators(self) -> list[Validator]:
+        """The discovered structural/metadata validators (cached; only paid on a validate).
 
-        Args:
-            data_mount: Path to the run mount holding the results tree (e.g. containing
-                ``flpe/momma/``).
+        A ``cached_property`` rather than constructor state so that operations which do not
+        validate anything -- ``cit parse`` (P1-10) -- never trigger the discovery walk.
+
+        Returns:
+            Every :class:`~cit.validation.Validator` subclass discovered in :mod:`cit.validation`.
         """
-        self._data_mount = data_mount
-        self._validators = Validator.discover()
+        return Validator.discover()
 
     @functools.cached_property
     def contracts(self) -> dict[str, Contract]:
@@ -61,7 +69,7 @@ class Orchestrate:
             rules[metadata_rules.module_name] = metadata_rules
         return rules
 
-    def iter_results(self, module: str) -> Iterator[tuple[Produces, NetcdfResult]]:
+    def iter_results(self, module: str, data_mount: str) -> Iterator[tuple[Produces, NetcdfResult]]:
         """Lazily yield one :class:`NetcdfResult` per produced file for ``module``.
 
         Nothing is read until a result's property is accessed; the caller scopes each with ``with``
@@ -69,6 +77,8 @@ class Orchestrate:
 
         Args:
             module: The module whose produced files to stream (a key of :attr:`contracts`).
+            data_mount: Path to the run mount holding the results tree (e.g. containing
+                ``flpe/momma/``).
 
         Yields:
             One :class:`NetcdfResult` per file matching the module's ``Produces.filepath`` template
@@ -76,14 +86,17 @@ class Orchestrate:
         """
         contract = self.contracts[module]
         for produces in contract.module.produces:
-            for filepath in find_result_files(self._data_mount, produces.filepath):
+            for filepath in find_result_files(data_mount, produces.filepath):
                 yield produces, NetcdfResult(str(filepath))
 
-    def validate(self, module: str, strict: bool = False) -> list[Finding]:
+    def _validate_module(
+        self, module: str, data_mount: str, strict: bool = False
+    ) -> list[Finding]:
         """Validate one module's produced results against its contract, one file at a time.
 
         Args:
             module: The module to validate (a key of :attr:`contracts`).
+            data_mount: Path to the run mount holding the results tree.
             strict: When True, treat SoS metadata-rule violations as failures rather than warnings.
 
         Returns:
@@ -91,18 +104,19 @@ class Orchestrate:
         """
         findings: list[Finding] = []
         rules = self.rules.get(module)  # None when this module has no rules artifact
-        for produces, result in self.iter_results(module):
+        for produces, result in self.iter_results(module, data_mount):
             with result:
                 ctx = ValidatorContext(module, produces, rules, result, strict)
                 for validator in self._validators:
                     findings.extend(validator.validate(ctx))
         return findings
 
-    def run(
+    def validate(
         self,
+        data_mount: str,
+        *,
         strict: bool = False,
         modules: Iterable[str] | None = None,
-        *,
         show_passed: bool = False,
         show_files: bool = False,
         max_files: int = DEFAULT_MAX_FILES,
@@ -111,6 +125,8 @@ class Orchestrate:
         """Validate every module (or a given subset) and aggregate a single report.
 
         Args:
+            data_mount: Path to the run mount holding the results tree (e.g. containing
+                ``flpe/momma/``).
             strict: When True, rule violations fail the run.
             modules: Modules to validate; defaults to every loaded contract.
             show_passed: When True, the rendered report also shows components whose findings
@@ -126,7 +142,11 @@ class Orchestrate:
             :attr:`contracts` so its banner can show each module's version/branch/commit.
         """
         modules = list(modules) if modules is not None else list(self.contracts.keys())
-        findings = [finding for module in modules for finding in self.validate(module, strict)]
+        findings = [
+            finding
+            for module in modules
+            for finding in self._validate_module(module, data_mount, strict)
+        ]
         contracts = {name: self.contracts[name] for name in modules}
         return Report(
             findings,

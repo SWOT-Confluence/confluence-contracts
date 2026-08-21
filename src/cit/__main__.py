@@ -39,8 +39,9 @@ def _validate(args: argparse.Namespace) -> int:
     show_files = args.show_files or args.max_files is not None
     max_files = DEFAULT_MAX_FILES if args.max_files is None else args.max_files
     checks = None if args.checks == _CHECKS_ALL else ValidationSource(args.checks)
-    orchestrate = Orchestrate(args.results)
-    report = orchestrate.run(
+    orchestrate = Orchestrate()
+    report = orchestrate.validate(
+        args.results,
         strict=args.strict,
         modules=args.module,
         show_passed=args.show_passed,
