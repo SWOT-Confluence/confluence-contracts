@@ -21,6 +21,7 @@ from collections.abc import Iterable, Iterator
 
 from cit.contract import Contract, Produces
 from cit.data import find_contract_files, find_result_files, find_rules_files, load_yaml
+from cit.parse import ContractParser
 from cit.report import DEFAULT_MAX_FILES, Finding, Report, ValidationSource
 from cit.result import NetcdfResult
 from cit.rules import MetadataRules
@@ -156,3 +157,12 @@ class Orchestrate:
             max_files=max_files,
             checks=checks,
         )
+
+    def parse(self, module_files: list, sos_group: str, rule_name: str):
+        """"""
+        # Determine if all module files match rule names
+        for module_file in module_files:
+            ContractParser().parse(module_file)
+
+
+

@@ -13,3 +13,30 @@ Planned (P1-10):
   rules artifact is supplied -- merge the SoS ``attrs`` per variable so the draft is complete
   enough to pass both validators. Serializes to draft YAML for ``cit parse``.
 """
+
+from abc import ABC, abstractmethod
+from pathlib import Path
+
+from pydantic import BaseModel
+
+class Parser(ABC):
+    """"""
+
+    @abstractmethod
+    def parse(self, *args, **kwargs) -> BaseModel:
+        """"""
+        ...
+
+    @staticmethod
+    def write(data: BaseModel | dict, output: str | Path, header: str = "") -> None:
+        """"""
+        ...
+
+
+class ContractParser(Parser):
+    """"""
+
+    def parse(self, module_file: Path) -> BaseModel:
+        """"""
+        print(module_file)
+

@@ -70,7 +70,20 @@ def _parse(args: argparse.Namespace) -> int:
     Raises:
         SystemExit: Always -- the ``parse`` subcommand is not implemented yet.
     """
-    raise SystemExit("cit parse: not implemented yet")
+    if not args.module_file:
+        raise SystemExit(
+            "cit parse: --module-file is required (this is the result file you " \
+            "like to create a contract for)."
+        )
+
+    if not args.sos_group:
+        raise SystemExit(
+            "cit parse: --rule-name is required (this is the name of the module" \
+            "tab you created in the SOS spreadsheet)."
+        )
+
+    orchestrate = Orchestrate()
+    orchestrate.parse(args.module_file, args.sos_group, args.rule_name)
 
 
 def _configure_logging(verbose: bool) -> None:
@@ -129,6 +142,30 @@ def build_parser() -> argparse.ArgumentParser:
         prog="cit",
         description="Validate Confluence module result files against contracts.",
         parents=[top_shared],
+    )
+
+    parser.add_argument(
+        "--module-file",
+        action="append",
+        default=None,
+        metavar="MODULE",
+        help="The path to a module file to create a contract for.",
+    )
+
+    parser.add_argument(
+        "--sos-group",
+        action="append",
+        default=None,
+        metavar="GROUP",
+        help="The name of the tab the SoS spreadsheet for metadata rules."
+    )
+
+    parser.add_argument(
+        "--rule-file",
+        action="append",
+        default=None,
+        metavar="RULE",
+        help="The path to the rule file you wish to parse."
     )
 
     subparsers = parser.add_subparsers(dest="command", required=True)
