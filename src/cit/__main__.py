@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import NoReturn
 
 from cit.orchestrate import Orchestrate
+from cit.parse import DEFAULT_RULE_NAME, RulesParser
 from cit.report import DEFAULT_MAX_FILES, ValidationSource
 
 _CHECKS_ALL = "all"
@@ -61,29 +62,68 @@ def _validate(args: argparse.Namespace) -> int:
     return report.exit_code
 
 
-def _parse(args: argparse.Namespace) -> int:
-    """Run ``cit parse`` (not yet implemented; see P1-10).
+def _module_file(value: str) -> tuple[str | None, str]:
+    """Parse a ``--module-file`` value, which may name its module explicitly.
+
+    ``PATH`` alone is the everyday form -- the module is matched from the filename against the
+    groups the rules source declares. ``MODULE=PATH`` states it outright, for a file whose name
+    does not carry its module or a module the rules source does not know.
 
     Args:
-        args: Parsed CLI arguments.
+        value: The raw argument, e.g. ``/mnt/data/flpe/momma/12590000211_momma.nc`` or
+            ``momma=/mnt/data/somewhere/results.nc``.
+
+    Returns:
+        An ``(explicit_module_name_or_None, path)`` pair.
+    """
+    name, separator, tail = value.partition("=")
+    if separator and "/" not in name and name.strip() and tail.strip():
+        return name.strip(), tail.strip()
+    return None, value.strip()
+
+
+def _parse(args: argparse.Namespace) -> int:
+    """Run ``cit parse``: resolve each result file to its module and its metadata rules.
+
+    Args:
+        args: Parsed CLI arguments (see the ``parse`` subparser in :func:`build_parser`).
+
+    Returns:
+        0 once every result file has been resolved to a module.
 
     Raises:
-        SystemExit: Always -- the ``parse`` subcommand is not implemented yet.
+        SystemExit: If ``--module-file`` was not given, or if the parse cannot be resolved --
+            the orchestrator raises a ``ValueError`` for that, translated here so the user sees
+            a message rather than a traceback.
     """
     if not args.module_file:
         raise SystemExit(
-            "cit parse: --module-file is required (this is the result file you " \
-            "like to create a contract for)."
-        )
-
-    if not args.sos_group:
-        raise SystemExit(
-            "cit parse: --rule-name is required (this is the name of the module" \
-            "tab you created in the SOS spreadsheet)."
+            "cit parse: --module-file PATH is required (a result file to draft a contract "
+            "from; repeat it for each file)."
         )
 
     orchestrate = Orchestrate()
-    orchestrate.parse(args.module_file, args.sos_group, args.rule_name)
+    try:
+        targets = orchestrate.parse(
+            args.module_file, args.rule_file, args.rules, strict=args.strict
+        )
+    except ValueError as error:
+        raise SystemExit(f"cit parse: {error}") from error
+
+    for target in targets:
+        if target.rules is None:
+            source = "no rules"
+        elif target.module == target.rules.rule_name:
+            source = f"{type(target.rules).__name__}: whole file (root + every group tab)"
+        else:
+            source = f"{type(target.rules).__name__}: {target.module} tab"
+        logger.info(
+            "%-12s <- %s  [%s]",
+            target.module,
+            ", ".join(path.name for path in target.module_files),
+            source,
+        )
+    return 0
 
 
 def _configure_logging(verbose: bool) -> None:
@@ -143,31 +183,6 @@ def build_parser() -> argparse.ArgumentParser:
         description="Validate Confluence module result files against contracts.",
         parents=[top_shared],
     )
-
-    parser.add_argument(
-        "--module-file",
-        action="append",
-        default=None,
-        metavar="MODULE",
-        help="The path to a module file to create a contract for.",
-    )
-
-    parser.add_argument(
-        "--sos-group",
-        action="append",
-        default=None,
-        metavar="GROUP",
-        help="The name of the tab the SoS spreadsheet for metadata rules."
-    )
-
-    parser.add_argument(
-        "--rule-file",
-        action="append",
-        default=None,
-        metavar="RULE",
-        help="The path to the rule file you wish to parse."
-    )
-
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     validate = subparsers.add_parser(
@@ -243,6 +258,56 @@ def build_parser() -> argparse.ArgumentParser:
         "parse",
         help="Generate a draft contract from a result file.",
         parents=[sub_shared],
+        epilog=(
+            "A module's name, the SoS group it writes, and the workbook tab holding that "
+            "group's metadata are all the same string, so none of them is a separate "
+            "argument: name the result files and the workbook, and the rest follows.\n"
+            "\n"
+            "  cit parse \\\n"
+            "      --module-file .../flpe/momma/12590000211_momma.nc \\\n"
+            "      --module-file .../flpe/metroman/12590000211_metroman.nc \\\n"
+            "      --rule-file docs/sos-dataset/sos_metadata.xlsx"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parse.add_argument(
+        "--module-file",
+        action="append",
+        type=_module_file,
+        default=None,
+        metavar="PATH",
+        dest="module_file",
+        help=(
+            "A result file to draft a contract from (repeatable). Its module is matched from "
+            "the filename against the groups the rules source declares; write MODULE=PATH to "
+            "state it outright."
+        ),
+    )
+    parse.add_argument(
+        "--rule-file",
+        default=None,
+        metavar="PATH",
+        dest="rule_file",
+        help=(
+            "The SoS metadata workbook supplying every module's metadata -- one workbook for "
+            "the whole run, with one tab per module. Omit it to draft contracts with no SoS "
+            "metadata merged in."
+        ),
+    )
+    parse.add_argument(
+        "--rules",
+        default=DEFAULT_RULE_NAME,
+        choices=RulesParser.names(),
+        metavar="NAME",
+        help=(
+            "Which rules parser reads --rule-file (default: %(default)s). This names the rules "
+            f"*source*, not a module: {', '.join(RulesParser.names())}."
+        ),
+    )
+    parse.add_argument(
+        "--strict",
+        action="store_true",
+        help="Treat a parse with no --rule-file as an error rather than a warning.",
     )
     parse.set_defaults(func=_parse)
 
