@@ -391,9 +391,7 @@ class Report:
         groups: dict[str, list[Finding]] = {}
         for finding in self._findings:
             groups.setdefault(key(finding), []).append(finding)
-        return {
-            group_key: sorted(groups[group_key], key=_sort_key) for group_key in sorted(groups)
-        }
+        return {group_key: sorted(groups[group_key], key=_sort_key) for group_key in sorted(groups)}
 
     def write_csv(self, path: str | Path) -> None:
         """Write every raw finding to ``path`` as CSV, one row per occurrence.
@@ -411,9 +409,7 @@ class Report:
             writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
             writer.writeheader()
             for finding in rows:
-                writer.writerow(
-                    {name: str(getattr(finding, name)) for name in fieldnames}
-                )
+                writer.writerow({name: str(getattr(finding, name)) for name in fieldnames})
 
     def __str__(self) -> str:
         """Render the banner, legend, checks block, counts line, and section-grouped findings.

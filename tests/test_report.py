@@ -353,9 +353,7 @@ def test_components_sorted_by_worst_severity_then_name():
     text = str(Report([warn_component, fail_component]))
     lines = text.splitlines()
 
-    assert lines.index(f"{report._INDENT * 3}Qout") < lines.index(
-        f"{report._INDENT * 3}zzz_extra"
-    )
+    assert lines.index(f"{report._INDENT * 3}Qout") < lines.index(f"{report._INDENT * 3}zzz_extra")
 
 
 def test_finding_with_empty_filepath_and_no_results_file_does_not_raise():
@@ -1009,9 +1007,7 @@ def test_passed_line_hidden_by_default_even_when_its_component_has_a_fail():
 
 def test_attribute_findings_render_nested_under_their_variable_not_as_components():
     """An attribute finding does not render as its own top-level component."""
-    own = _finding(
-        component="nodes/time", type=FindingType.MISSING, status=FindingStatus.FAIL
-    )
+    own = _finding(component="nodes/time", type=FindingType.MISSING, status=FindingStatus.FAIL)
     attribute = _finding(
         component="nodes/time.calendar",
         scope="attribute",
@@ -1146,7 +1142,9 @@ def test_both_sections_render_structure_first_with_headings():
     """A run with both sources renders both headings, structure section before metadata."""
     structure = _finding(component="stage", type=FindingType.EXTRA, status=FindingStatus.WARN)
     metadata = _metadata_finding(
-        component="Name", scope="global_attribute", type=FindingType.MISSING,
+        component="Name",
+        scope="global_attribute",
+        type=FindingType.MISSING,
         status=FindingStatus.WARN,
     )
 
@@ -1171,7 +1169,9 @@ def test_checks_structure_renders_only_the_structure_section():
     """checks=ValidationSource.STRUCTURE hides the metadata section even when it has findings."""
     structure = _finding(component="stage", type=FindingType.EXTRA, status=FindingStatus.WARN)
     metadata = _metadata_finding(
-        component="Name", scope="global_attribute", type=FindingType.MISSING,
+        component="Name",
+        scope="global_attribute",
+        type=FindingType.MISSING,
         status=FindingStatus.WARN,
     )
 
@@ -1185,7 +1185,9 @@ def test_checks_metadata_renders_only_the_metadata_section():
     """checks=ValidationSource.METADATA hides the structure section even when it has findings."""
     structure = _finding(component="stage", type=FindingType.EXTRA, status=FindingStatus.WARN)
     metadata = _metadata_finding(
-        component="Name", scope="global_attribute", type=FindingType.MISSING,
+        component="Name",
+        scope="global_attribute",
+        type=FindingType.MISSING,
         status=FindingStatus.WARN,
     )
 
@@ -1201,7 +1203,9 @@ def test_checks_does_not_affect_exit_code_counts_or_csv(tmp_path: Path):
         component="stage", type=FindingType.DIFFERENT, status=FindingStatus.FAIL
     )
     metadata_warn = _metadata_finding(
-        component="Name", scope="global_attribute", type=FindingType.MISSING,
+        component="Name",
+        scope="global_attribute",
+        type=FindingType.MISSING,
         status=FindingStatus.WARN,
     )
     findings = [structure_fail, metadata_warn]

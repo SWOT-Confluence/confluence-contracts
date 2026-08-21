@@ -231,9 +231,7 @@ def test_structure_and_metadata_findings_reach_stdout_distinguishably(
     ds.createVariable("extra_var", "f8", ("nt",))  # undeclared -> structure EXTRA/WARN
     ds.close()
 
-    exit_code = _run_cli(
-        monkeypatch, contract_file, tmp_path / "mnt4", rules_files=[rules_file]
-    )
+    exit_code = _run_cli(monkeypatch, contract_file, tmp_path / "mnt4", rules_files=[rules_file])
 
     assert exit_code == 0  # both findings are WARN-only
     text = capsys.readouterr().out

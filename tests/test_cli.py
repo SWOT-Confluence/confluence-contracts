@@ -35,9 +35,7 @@ def test_validate_parses_with_no_arguments():
 
 def test_validate_module_repeats():
     """--module is repeatable and accumulates in order given."""
-    args = build_parser().parse_args(
-        ["validate", "--module", "momma", "--module", "neobam"]
-    )
+    args = build_parser().parse_args(["validate", "--module", "momma", "--module", "neobam"])
     assert args.module == ["momma", "neobam"]
 
 
@@ -207,9 +205,7 @@ def test_checks_all_reaches_orchestrate_run_as_none(monkeypatch):
 
 def test_max_files_below_one_exits_with_clear_message(capsys):
     """--max-files 0 exits with a clear message rather than a traceback."""
-    args = build_parser().parse_args(
-        ["validate", "--results", "/mnt/data", "--max-files", "0"]
-    )
+    args = build_parser().parse_args(["validate", "--results", "/mnt/data", "--max-files", "0"])
     with pytest.raises(SystemExit) as excinfo:
         args.func(args)
 

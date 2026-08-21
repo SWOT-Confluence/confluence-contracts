@@ -422,9 +422,7 @@ class RulesValidator(Validator):
         rules = context.rules
         result = context.result
         strict = context.strict
-        report = _Reporter(
-            context.name, rules.filepath, ValidationSource.METADATA, result.filepath
-        )
+        report = _Reporter(context.name, rules.filepath, ValidationSource.METADATA, result.filepath)
 
         return [
             *self._check_global_attributes(report, rules.global_attributes, result, strict),

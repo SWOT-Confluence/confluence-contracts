@@ -34,9 +34,7 @@ def _validate(args: argparse.Namespace) -> int:
             "containing flpe/momma/)."
         )
     if args.max_files is not None and args.max_files < 1:
-        raise SystemExit(
-            f"cit validate: --max-files must be at least 1 (got {args.max_files})."
-        )
+        raise SystemExit(f"cit validate: --max-files must be at least 1 (got {args.max_files}).")
 
     show_files = args.show_files or args.max_files is not None
     max_files = DEFAULT_MAX_FILES if args.max_files is None else args.max_files
