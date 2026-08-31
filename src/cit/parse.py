@@ -9,15 +9,15 @@ Identity is one name -- the **module name** -- shared by every side of a parse:
 
 - the contract it drafts (``contracts/<module>.yml``, whose ``module.name`` is that name),
 - the :class:`RulesParser` subclass registered under it (``output`` -> :class:`OutputRulesParser`),
-- and, by default, the SoS group whose workbook tab supplies that module's metadata.
+- and, for rules, the SoS group whose workbook tab supplies that module's metadata.
 
-Because the name is the key, ``cit parse`` never has to guess a module's identity from a
-filename, and the CLI's three per-module inputs -- result files, workbook, groups -- align by
-name rather than by argument order (see :meth:`cit.orchestrate.Orchestrate.parse`).
+The :class:`ParsePlan` returned by :meth:`cit.orchestrate.Orchestrate.parse` is the object graph
+for a single parse run: one :class:`ContractParser` per module, one :class:`RulesParser` per rules
+source, and a :attr:`ParsePlan.both` view of where the two sets intersect.
 
 Planned (P1-10):
 
-- ``ContractParser.parse`` -- walk a ``Result`` via :mod:`cit.netcdf`, emit each variable's
+- ``ContractParser.parse`` -- walk the result files via :mod:`cit.netcdf`, emit each variable's
   ``dtype`` / ``dimensions`` / ``required`` and the ``filepath`` template, pre-fill the
   ``version`` / ``source`` scaffold, and -- when a rules artifact is supplied -- merge the SoS
   ``attrs`` per variable so the draft is complete enough to pass both validators.
@@ -29,6 +29,7 @@ Planned (P1-10):
 
 import inspect
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
@@ -36,15 +37,12 @@ from typing import ClassVar
 import yaml
 from pydantic import BaseModel
 
-#: The rules source used when --rules is not given: the SoS metadata workbook.
-DEFAULT_RULE_NAME = "output"
-
 
 class Parser(ABC):
     """Abstract base for anything that reads a source artifact and emits a model."""
 
     @abstractmethod
-    def parse(self, *args, **kwargs) -> BaseModel:
+    def parse(self) -> BaseModel:
         """Read this parser's source and return the model it describes.
 
         Returns:
@@ -76,14 +74,21 @@ class Parser(ABC):
 class ContractParser(Parser):
     """Draft a contract from one module's produced result files."""
 
-    def parse(self, module_file: Path) -> BaseModel:
-        """Read a result file and return the draft contract describing it.
+    def __init__(self, module: str, module_files: Sequence[Path]) -> None:
+        """Bind this parser to the module and its result files.
 
         Args:
-            module_file: The produced result file to describe.
+            module: The module name -- the identity the drafted contract is committed under.
+            module_files: The produced result files to draft a contract from, in the order given.
+        """
+        self.module = module
+        self.module_files = tuple(module_files)
+
+    def parse(self) -> BaseModel:
+        """Read the result files and return the draft contract describing them.
 
         Returns:
-            The drafted :class:`~cit.contract.Contract`.
+            The drafted :class:`~cit.contract.Contract` (P1-10).
         """
         ...
 
@@ -248,7 +253,7 @@ class OutputRulesParser(RulesParser):
             tab for tab in workbook.sheetnames if tab not in skip and not tab.startswith("_")
         )
 
-    def parse(self, *args, **kwargs) -> BaseModel:
+    def parse(self) -> BaseModel:
         """Read the workbook's fixed tabs and module groups into a rules model.
 
         Returns:
@@ -258,19 +263,27 @@ class OutputRulesParser(RulesParser):
 
 
 @dataclass(frozen=True)
-class ParseTarget:
-    """One module's parse inputs, once its result files have been resolved to a module name.
+class ParsePlan:
+    """The object graph for a single ``cit parse`` run.
+
+    Holds one :class:`ContractParser` per module and one :class:`RulesParser` per rules source.
+    The :attr:`both` property names the modules that appear in both sets -- those whose drafted
+    contract will carry SoS metadata merged from the rules source in step 3 of the parse
+    algorithm (P1-10).
 
     Attributes:
-        module: The module name. It is also the SoS group this module writes and the workbook
-            tab holding that group's metadata -- one name, three roles, which is why none of
-            them is a separate command-line argument.
-        module_files: The produced result files to draft a contract from, in the order given.
-        rules: The :class:`RulesParser` reading the rules source, shared across every target of
-            a parse; ``None`` when no ``--rule-file`` was given, so the draft carries no SoS
-            metadata.
+        contracts: A :class:`ContractParser` per module, keyed by module name.
+        rules: A :class:`RulesParser` per rules source, keyed by the registered rules name.
     """
 
-    module: str
-    module_files: tuple[Path, ...]
-    rules: RulesParser | None = None
+    contracts: dict[str, ContractParser]
+    rules: dict[str, RulesParser]
+
+    @property
+    def both(self) -> list[str]:
+        """Module names present in both :attr:`contracts` and :attr:`rules`, sorted.
+
+        Returns:
+            The sorted intersection of the contracts and rules key sets.
+        """
+        return sorted(set(self.contracts) & set(self.rules))

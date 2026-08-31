@@ -117,18 +117,18 @@ class _SingleAction(argparse.Action):
 
 
 def _parse(args: argparse.Namespace) -> int:
-    """Run ``cit parse``: resolve each result file to its module and its metadata rules.
+    """Run ``cit parse``: build a parse plan from tagged module files and rules sources.
 
     Args:
         args: Parsed CLI arguments (see the ``parse`` subparser in :func:`build_parser`).
 
     Returns:
-        0 once every result file has been resolved to a module.
+        0 once the parse plan has been built (contract and rules bodies are drafted in P1-10).
 
     Raises:
         SystemExit: If ``--module-file`` was not given, or if the parse cannot be resolved --
-            the orchestrator raises a ``ValueError`` for that, translated here so the user sees
-            a message rather than a traceback.
+            the orchestrator raises a ``ValueError`` for that (e.g. an unregistered rules name),
+            translated here so the user sees a message rather than a traceback.
     """
     if not args.module_file:
         raise SystemExit(
@@ -136,34 +136,20 @@ def _parse(args: argparse.Namespace) -> int:
             "contract from; repeat it for each file)."
         )
 
+    # Group the flat list of (name, path) pairs by name for the orchestrator's Mapping API.
+    module_files: dict[str, list[str]] = {}
+    for name, path in args.module_file:
+        module_files.setdefault(name, []).append(path)
+
+    # args.rule_file is [(name, path), ...] or None; convert to {name: path} or None.
+    rule_files: dict[str, str] | None = dict(args.rule_file) if args.rule_file else None
+
     orchestrate = Orchestrate()
     try:
-        # args.rule_file is [(rule_name, path), ...] or None.  The existing orchestrate
-        # interface takes a single (rule_file, rule_name) pair; Step 3 will update it to
-        # accept the full mapping once the parse plan is in place.
-        if args.rule_file:
-            rule_name, rule_file_path = args.rule_file[0]
-            targets = orchestrate.parse(
-                args.module_file, rule_file_path, rule_name, strict=args.strict
-            )
-        else:
-            targets = orchestrate.parse(args.module_file, strict=args.strict)
+        orchestrate.parse(module_files, rule_files, strict=args.strict)
     except ValueError as error:
         raise SystemExit(f"cit parse: {error}") from error
 
-    for target in targets:
-        if target.rules is None:
-            source = "no rules"
-        elif target.module == target.rules.rule_name:
-            source = f"{type(target.rules).__name__}: whole file (root + every group tab)"
-        else:
-            source = f"{type(target.rules).__name__}: {target.module} tab"
-        logger.info(
-            "%-12s <- %s  [%s]",
-            target.module,
-            ", ".join(path.name for path in target.module_files),
-            source,
-        )
     return 0
 
 

@@ -1,13 +1,14 @@
 """Tests for resolving ``cit parse``'s result files to modules and picking the rules parser."""
 
 import argparse
+import logging
 from pathlib import Path
 
 import pytest
 
 from cit.__main__ import _pair, build_parser
 from cit.orchestrate import Orchestrate
-from cit.parse import OutputRulesParser, RulesParser
+from cit.parse import ContractParser, OutputRulesParser, ParsePlan, RulesParser
 
 WORKBOOK = "docs/sos-dataset/sos_metadata.xlsx"
 MOMMA = "/mnt/data/flpe/momma/12590000211_momma.nc"
@@ -130,55 +131,116 @@ def test_module_file_default_is_not_shared_across_calls():
 # --- the whole parse ------------------------------------------------------------------
 
 
-def test_parse_resolves_the_worked_example_against_the_workbook():
-    targets = Orchestrate().parse([("momma", MOMMA), ("metroman", METROMAN)], WORKBOOK)
-    assert [t.module for t in targets] == ["metroman", "momma"]
-    assert all(isinstance(t.rules, OutputRulesParser) for t in targets)
-    assert {t.rules for t in targets} == {targets[0].rules}, "one parser shared by the run"
+def test_parse_returns_a_parse_plan():
+    """Orchestrate.parse returns a ParsePlan."""
+    plan = Orchestrate().parse({"momma": [MOMMA]}, {"output": WORKBOOK})
+    assert isinstance(plan, ParsePlan)
 
 
-def test_parse_groups_several_files_under_one_module():
-    targets = Orchestrate().parse(
-        [("momma", MOMMA), ("momma", "/mnt/data/flpe/momma/74291800011_momma.nc")], WORKBOOK
+def test_parse_plan_contracts_keyed_by_module():
+    """ParsePlan.contracts holds one ContractParser per module, keyed by name."""
+    plan = Orchestrate().parse({"momma": [MOMMA], "metroman": [METROMAN]}, {"output": WORKBOOK})
+    assert set(plan.contracts) == {"momma", "metroman"}
+    assert isinstance(plan.contracts["momma"], ContractParser)
+    assert plan.contracts["momma"].module == "momma"
+
+
+def test_parse_plan_rules_keyed_by_name():
+    """ParsePlan.rules holds one RulesParser per rules source, keyed by the registered name."""
+    plan = Orchestrate().parse({"momma": [MOMMA]}, {"output": WORKBOOK})
+    assert set(plan.rules) == {"output"}
+    assert isinstance(plan.rules["output"], OutputRulesParser)
+
+
+def test_parse_plan_both_is_sorted_intersection():
+    """ParsePlan.both returns the sorted intersection of contracts and rules keys."""
+    plan = Orchestrate().parse(
+        {"momma": [MOMMA], "metroman": [METROMAN], "output": ["/mnt/data/output.nc"]},
+        {"output": WORKBOOK},
     )
-    assert len(targets) == 1
-    assert targets[0].module == "momma"
-    assert len(targets[0].module_files) == 2
+    assert plan.both == ["output"]
 
 
-def test_parse_accepts_an_explicit_module_name():
-    targets = Orchestrate().parse([("momma", "/mnt/data/anything.nc")], WORKBOOK)
-    assert targets[0].module == "momma"
-    assert targets[0].module_files == (Path("/mnt/data/anything.nc"),)
+def test_parse_plan_both_is_empty_when_no_rules():
+    """ParsePlan.both is empty when no rule files are given."""
+    plan = Orchestrate().parse({"momma": [MOMMA]})
+    assert plan.both == []
 
 
-def test_parse_without_a_workbook_warns_and_produces_no_rules(caplog):
-    targets = Orchestrate().parse([("momma", MOMMA)])
-    assert targets[0].module == "momma"
-    assert targets[0].rules is None
+def test_parse_groups_multiple_files_under_one_module():
+    """Passing several paths under the same module key groups them in one ContractParser."""
+    momma2 = "/mnt/data/flpe/momma/74291800011_momma.nc"
+    plan = Orchestrate().parse({"momma": [MOMMA, momma2]})
+    assert len(plan.contracts) == 1
+    assert plan.contracts["momma"].module_files == (Path(MOMMA), Path(momma2))
+
+
+def test_parse_without_rule_file_warns(caplog):
+    """A parse with no rule files logs a warning about missing SoS metadata."""
+    with caplog.at_level(logging.WARNING, logger="cit.orchestrate"):
+        Orchestrate().parse({"momma": [MOMMA]})
     assert "no --rule-file" in caplog.text
 
 
-def test_parse_without_a_workbook_is_an_error_under_strict():
+def test_parse_with_strict_and_no_rule_file_errors():
+    """Under --strict, a parse with no rule files raises ValueError."""
     with pytest.raises(ValueError, match="--strict requires a rules source"):
-        Orchestrate().parse([("momma", MOMMA)], strict=True)
+        Orchestrate().parse({"momma": [MOMMA]}, strict=True)
 
 
-def test_the_rules_source_covers_the_file_it_is_named_for():
-    """'output' is the file, not a group -- root plus every group tab describes it."""
-    targets = Orchestrate().parse([("output", "/mnt/data/na_SOS_results.nc")], WORKBOOK)
-    assert isinstance(targets[0].rules, OutputRulesParser)
-
-
-def test_parse_warns_when_a_module_is_in_neither_the_groups_nor_the_source(caplog):
-    targets = Orchestrate().parse([("lakeflow", "/mnt/data/x.nc")], WORKBOOK)
-    assert targets[0].rules is None
-    assert "no rules for 'lakeflow'" in caplog.text
-
-
-def test_parse_rejects_an_unregistered_rules_source():
+def test_parse_rejects_unregistered_rules_name():
+    """An unregistered rules name raises ValueError naming the registered alternatives."""
     with pytest.raises(ValueError, match="no rules parser is registered as 'nope'"):
-        Orchestrate().parse([("momma", MOMMA)], WORKBOOK, "nope")
+        Orchestrate().parse({"momma": [MOMMA]}, {"nope": WORKBOOK})
+
+
+def test_parse_logs_contracts_rules_both(caplog):
+    """Orchestrate.parse logs three summary lines: contracts, rules, both."""
+    with caplog.at_level(logging.INFO, logger="cit.orchestrate"):
+        Orchestrate().parse(
+            {"momma": [MOMMA], "metroman": [METROMAN], "output": ["/mnt/data/output.nc"]},
+            {"output": WORKBOOK},
+        )
+    assert "contracts:" in caplog.text
+    assert "'metroman'" in caplog.text
+    assert "'momma'" in caplog.text
+    assert "rules:" in caplog.text
+    assert "'output' (OutputRulesParser)" in caplog.text
+    assert "both:" in caplog.text
+    assert "'output'" in caplog.text
+
+
+def test_parse_contract_parsers_are_not_invoked():
+    """ContractParser instances are constructed with module and files; parse() is not called."""
+    plan = Orchestrate().parse({"momma": [MOMMA]}, {"output": WORKBOOK})
+    assert plan.contracts["momma"].module == "momma"
+    assert plan.contracts["momma"].module_files == (Path(MOMMA),)
+
+
+def test_parse_cli_requires_module_file():
+    """``cit parse`` with no --module-file exits with a clear message."""
+    args = build_parser().parse_args(["parse"])
+    with pytest.raises(SystemExit) as excinfo:
+        args.func(args)
+    assert "--module-file" in str(excinfo.value)
+
+
+def test_parse_cli_translates_unregistered_rules_name_to_system_exit():
+    """An unregistered rules name in --rule-file becomes a SystemExit with a clear message."""
+    args = build_parser().parse_args(
+        ["parse", "--module-file", f"momma={MOMMA}", "--rule-file", f"nope={WORKBOOK}"]
+    )
+    with pytest.raises(SystemExit) as excinfo:
+        args.func(args)
+    assert "no rules parser is registered as 'nope'" in str(excinfo.value)
+
+
+def test_parse_cli_returns_0_on_success():
+    """``cit parse`` returns 0 when the parse plan is built successfully."""
+    args = build_parser().parse_args(
+        ["parse", "--module-file", f"momma={MOMMA}", "--rule-file", f"output={WORKBOOK}"]
+    )
+    assert args.func(args) == 0
 
 
 # --- the registry ---------------------------------------------------------------------

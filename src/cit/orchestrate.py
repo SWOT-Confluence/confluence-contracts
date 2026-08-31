@@ -15,17 +15,18 @@ then aggregates every module's findings into a single :class:`~cit.report.Report
 The run mount is an argument to :meth:`validate`, not constructor state: it is specific to that one
 operation -- ``cit parse`` reads designated files rather than a mount tree.
 
-:meth:`Orchestrate.parse` goes the other way, from files to a contract. Its inputs arrive as
-``MODULE=PATH``-tagged CLI flags, so :meth:`Orchestrate._align` matches them on the module name
-each was tagged with and hands back one target per module, carrying the
-:class:`~cit.parse.RulesParser` registered under that same name. Matching by name rather than by
-argument order is what keeps a parse honest: the drafted contract gets committed, so its module
-identity is always something the user typed, never inferred from a result filename.
+:meth:`Orchestrate.parse` goes the other way, from files to contracts and rules artifacts. It
+receives module files and rules sources already grouped by name (``MODULE=PATH`` tags from the
+CLI), builds one :class:`~cit.parse.ContractParser` per module and one
+:class:`~cit.parse.RulesParser` per rules source, and returns a :class:`~cit.parse.ParsePlan`
+that records where the two sets intersect. Matching by name rather than by argument order is
+what keeps a parse honest: the drafted contract gets committed, so its module identity is always
+something the user typed, never inferred from a result filename.
 """
 
 import functools
 import logging
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from pathlib import Path
 
 from cit.contract import Contract, Produces
@@ -35,7 +36,7 @@ from cit.data import (
     find_rules_files,
     load_yaml,
 )
-from cit.parse import DEFAULT_RULE_NAME, ParseTarget, RulesParser
+from cit.parse import ContractParser, ParsePlan, RulesParser
 from cit.report import DEFAULT_MAX_FILES, Finding, Report, ValidationSource
 from cit.result import NetcdfResult
 from cit.rules import MetadataRules
@@ -174,38 +175,42 @@ class Orchestrate:
             checks=checks,
         )
 
-    def _align(
+    def parse(
         self,
-        module_files: Sequence[tuple[str, str]],
-        rule_file: str | None = None,
-        rule_name: str = DEFAULT_RULE_NAME,
+        module_files: Mapping[str, Sequence[str]],
+        rule_files: Mapping[str, str] | None = None,
         *,
         strict: bool = False,
-    ) -> list[ParseTarget]:
-        """Group a parse's result files by the module that produced them.
+    ) -> ParsePlan:
+        """Build a :class:`~cit.parse.ParsePlan` from tagged module files and rules sources.
 
-        One rules source serves the whole parse -- the SoS metadata workbook holds a tab per
-        module -- so ``--rule-file`` is a single value, and the tab a module uses is its own
-        name. Each result file carries an explicit ``MODULE=PATH`` tag; bare paths are rejected
-        by the CLI so the module identity is always something the user typed.
+        Creates one :class:`~cit.parse.ContractParser` per module key and one
+        :class:`~cit.parse.RulesParser` per rules key. Parser ``parse()`` bodies are not
+        invoked; drafting each contract and rules artifact happens in the next step (P1-10).
 
         Args:
-            module_files: ``(module_name, path)`` per ``--module-file`` (names are required).
-            rule_file: The rules source (SoS metadata workbook) supplying metadata; ``None``
-                drafts contracts with no SoS metadata merged in.
-            rule_name: Which registered rules parser reads ``rule_file``.
+            module_files: Produced result files grouped by module name -- each key is a module
+                name and each value is the sequence of file paths for that module's contract parser.
+            rule_files: Rules sources keyed by the registered rules-parser name (e.g.
+                ``"output"``); ``None`` drafts contracts with no SoS metadata merged in.
             strict: When True, parsing with no rules source is an error rather than a warning.
 
         Returns:
-            One :class:`~cit.parse.ParseTarget` per module, sorted by module name.
+            A :class:`~cit.parse.ParsePlan` carrying the constructed parsers and the
+            :attr:`~cit.parse.ParsePlan.both` intersection.
 
         Raises:
-            ValueError: If no rules parser is registered as ``rule_name``, or -- under
-                ``strict`` -- if no rules source was given.
+            ValueError: If a rules name matches no registered parser (see
+                :meth:`~cit.parse.RulesParser.create`), or -- under ``strict`` -- if no
+                ``rule_files`` were given.
         """
-        rules = None if rule_file is None else RulesParser.create(rule_name, Path(rule_file))
+        # Build rules parsers first so a bad rule name raises before any contract parsers are built.
+        rules: dict[str, RulesParser] = {}
+        if rule_files:
+            for name, path in rule_files.items():
+                rules[name] = RulesParser.create(name, Path(path))
 
-        if rules is None:
+        if not rules:
             if strict:
                 raise ValueError(
                     "no --rule-file; --strict requires a rules source so the drafted contracts "
@@ -216,66 +221,19 @@ class Orchestrate:
                 "merged in"
             )
 
-        known = rules.groups() if rules else sorted(self.contracts)
-        grouped: dict[str, list[Path]] = {}
-        for module, path in module_files:
-            grouped.setdefault(module, []).append(Path(path))
+        contracts: dict[str, ContractParser] = {
+            module: ContractParser(module, [Path(p) for p in paths])
+            for module, paths in module_files.items()
+        }
 
-        # The rules source's own name covers the whole file it describes -- parsing `output`
-        # reads every group plus the fixed tabs, so it is served even though it is not a group.
-        covered = set(known) | ({rules.rule_name} if rules else set())
-        uncovered = sorted(set(grouped) - covered)
-        if uncovered:
-            logger.warning(
-                "no rules for %s; it is not one of %s, so its contract carries no SoS metadata",
-                _names(uncovered),
-                _names(sorted(covered)),
-            )
+        plan = ParsePlan(contracts=contracts, rules=rules)
 
-        return [
-            ParseTarget(
-                module=module,
-                module_files=tuple(grouped[module]),
-                rules=rules if module in covered else None,
-            )
-            for module in sorted(grouped)
-        ]
+        # Log the three-line summary so a library caller and the CLI see the same record.
+        logger.info("contracts: %s", ", ".join(f"'{m}'" for m in sorted(contracts)) or "none")
+        logger.info(
+            "rules:     %s",
+            ", ".join(f"'{n}' ({type(r).__name__})" for n, r in sorted(rules.items())) or "none",
+        )
+        logger.info("both:      %s", ", ".join(f"'{m}'" for m in plan.both) or "none")
 
-    def parse(
-        self,
-        module_files: Sequence[tuple[str, str]],
-        rule_file: str | None = None,
-        rule_name: str = DEFAULT_RULE_NAME,
-        *,
-        strict: bool = False,
-    ) -> list[ParseTarget]:
-        """Resolve a parse into one target per module: its result files and its rules parser.
-
-        Resolving the modules and choosing the rules parser is the whole of this operation
-        today; drafting each target's contract lands with ``ContractParser.parse`` in P1-10.
-
-        Args:
-            module_files: ``(module_name, path)`` per ``--module-file`` (names are required).
-            rule_file: The rules source supplying SoS metadata, or None.
-            rule_name: Which registered rules parser reads ``rule_file``.
-            strict: When True, parsing with no rules source is an error.
-
-        Returns:
-            One :class:`~cit.parse.ParseTarget` per module, sorted by module name.
-
-        Raises:
-            ValueError: If the parse cannot be resolved (see :meth:`_align`).
-        """
-        return self._align(module_files, rule_file, rule_name, strict=strict)
-
-
-def _names(names: Sequence[str]) -> str:
-    """Render module names for an error message.
-
-    Args:
-        names: The module names to render.
-
-    Returns:
-        The names comma-separated and quoted, or ``"none"`` when empty.
-    """
-    return ", ".join(repr(name) for name in names) or "none"
+        return plan
