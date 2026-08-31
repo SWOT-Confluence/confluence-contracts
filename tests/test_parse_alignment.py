@@ -96,7 +96,7 @@ def test_resolve_matches_a_published_granule_with_its_run_type_and_timestamps():
     ],
 )
 def test_resolve_falls_back_to_the_filename_suffix(filename, expected):
-    """metroman has a workbook tab but no contract yet, so the suffix rule carries it."""
+    """Metroman has a workbook tab but no contract yet, so the suffix rule carries it."""
     assert Orchestrate()._resolve(f"/mnt/data/{filename}", ["momma", "metroman"]) == expected
 
 
