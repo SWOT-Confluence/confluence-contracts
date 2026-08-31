@@ -68,6 +68,11 @@ and the PR descriptions.
 
 ### Changed
 
+- **`cit parse` argument surface:** `--module-file MODULE=PATH` and `--rule-file RULES=PATH` now
+  require strict `NAME=VALUE` tagging (bare paths, `--rules`, and `--sos-group` are gone); the
+  `ParsePlan` object graph — one `ContractParser` per module, one `RulesParser` per rules source —
+  is wired up ready for parser bodies in a follow-on epic
+  ([#11](https://github.com/SWOT-Confluence/confluence-contracts/issues/11)).
 - **A variable's `shape` field is now called `dimensions`:** The field lists dimension *names*
   rather than sizes, so it now carries the same name netCDF itself uses. Every existing contract
   file must rename the key, and `schema/contract.schema.json` has been regenerated to match
