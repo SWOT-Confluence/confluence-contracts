@@ -91,19 +91,19 @@ def test_sos_group_is_gone():
         build_parser().parse_args(["parse", "--sos-group", "momma"])
 
 
-def test_module_file_repeats_accumulate():
-    """Repeating --module-file with the same module name accumulates both entries."""
+def test_module_file_duplicate_name_errors():
+    """Repeating --module-file with the same module name is rejected by argparse."""
     momma2 = "/mnt/data/flpe/momma/74291800011_momma.nc"
-    args = build_parser().parse_args(
-        [
-            "parse",
-            "--module-file",
-            f"momma={MOMMA}",
-            "--module-file",
-            f"momma={momma2}",
-        ]
-    )
-    assert args.module_file == [("momma", MOMMA), ("momma", momma2)]
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(
+            [
+                "parse",
+                "--module-file",
+                f"momma={MOMMA}",
+                "--module-file",
+                f"momma={momma2}",
+            ]
+        )
 
 
 def test_rule_file_duplicate_name_errors():

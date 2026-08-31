@@ -86,11 +86,11 @@ def _pair(value: str) -> tuple[str, str]:
 
 
 class _SingleAction(argparse.Action):
-    """Custom action for ``--rule-file``: accumulate ``(name, path)`` pairs, reject duplicates.
+    """Custom action for tagged flags: accumulate ``(name, path)`` pairs, reject duplicates.
 
-    Allows ``--rule-file`` to be repeated (once per distinct rules source), but raises an
-    argparse error if the same name appears twice, since a second workbook under the same
-    registry key would be silently ignored at parse time.
+    Used by both ``--module-file`` and ``--rule-file``.  Each flag may be repeated once per
+    distinct name tag, but a second occurrence of the same name is rejected at parse time with
+    a clear error naming the duplicate and the flag.
     """
 
     def __call__(
@@ -106,13 +106,14 @@ class _SingleAction(argparse.Action):
             parser: The argument parser, used to emit the error.
             namespace: The in-progress parsed namespace.
             values: The ``(name, path)`` pair produced by :func:`_pair`.
-            option_string: The option string used on the command line (e.g. ``--rule-file``).
+            option_string: The option string used on the command line (e.g. ``--module-file``).
         """
         current: list[tuple[str, str]] = getattr(namespace, self.dest) or []
         name, _ = values
+        flag = option_string or self.option_strings[0]
         for existing_name, _ in current:
             if existing_name == name:
-                parser.error(f"--rule-file {name!r} appears more than once")
+                parser.error(f"{flag} {name!r} appears more than once")
         setattr(namespace, self.dest, [*current, values])
 
 
@@ -136,10 +137,8 @@ def _parse(args: argparse.Namespace) -> int:
             "contract from; repeat it for each file)."
         )
 
-    # Group the flat list of (name, path) pairs by name for the orchestrator's Mapping API.
-    module_files: dict[str, list[str]] = {}
-    for name, path in args.module_file:
-        module_files.setdefault(name, []).append(path)
+    # Names are guaranteed unique by _SingleAction; map each to a single-element list.
+    module_files: dict[str, list[str]] = {name: [path] for name, path in args.module_file}
 
     # args.rule_file is [(name, path), ...] or None; convert to {name: path} or None.
     rule_files: dict[str, str] | None = dict(args.rule_file) if args.rule_file else None
@@ -297,14 +296,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parse.add_argument(
         "--module-file",
-        action="append",
+        action=_SingleAction,
         type=_pair,
         default=None,
         metavar="MODULE=PATH",
         dest="module_file",
         help=(
             "A result file to draft a contract from (repeatable, MODULE=PATH required). "
-            "Repeat with the same MODULE to add more files to that module's contract. "
+            "Each MODULE name may appear at most once. "
             "The tag is the name the drafted contract is committed under."
         ),
     )
