@@ -127,60 +127,11 @@ def test_module_file_default_is_not_shared_across_calls():
     assert second.module_file is None
 
 
-# --- resolving a filename to a module -------------------------------------------------
-
-
-def test_resolve_uses_the_contract_that_declares_the_filename():
-    """contracts/momma.yml declares flpe/momma/{reach_id}_momma.nc, so momma claims the file."""
-    assert Orchestrate()._resolve(MOMMA, []) == "momma"
-
-
-def test_resolve_finds_a_module_its_filename_never_mentions():
-    """'af_sword_v17_SOS_results.nc' says nothing about output -- output.yml's template does."""
-    granule = "/mnt/data/output/sos/af_sword_v17_SOS_results.nc"
-    assert Orchestrate()._resolve(granule, []) == "output"
-
-
-def test_resolve_matches_a_published_granule_with_its_run_type_and_timestamps():
-    granule = "/mnt/data/na_sword_v16_SOS_results.nc"
-    assert Orchestrate()._resolve(granule, []) == "output"
-
-
-@pytest.mark.parametrize(
-    ("filename", "expected"),
-    [
-        ("12590000211_metroman.nc", "metroman"),
-        ("metroman.nc", "metroman"),
-    ],
-)
-def test_resolve_falls_back_to_the_filename_suffix(filename, expected):
-    """Metroman has a workbook tab but no contract yet, so the suffix rule carries it."""
-    assert Orchestrate()._resolve(f"/mnt/data/{filename}", ["momma", "metroman"]) == expected
-
-
-def test_resolve_prefers_the_longest_suffix_match():
-    """'metroman' must not lose to a shorter module whose name it ends with."""
-    assert Orchestrate()._resolve("/mnt/data/123_metroman.nc", ["man", "metroman"]) == "metroman"
-
-
-def test_resolve_refuses_to_invent_a_module_name():
-    """Freehand inference would commit a contract under a name nobody chose."""
-    with pytest.raises(ValueError, match="cannot tell which module produced 'mystery.nc'"):
-        Orchestrate()._resolve("/mnt/data/mystery.nc", ["momma", "metroman"])
-
-
-def test_resolve_error_names_both_lookups_and_the_explicit_form():
-    with pytest.raises(ValueError, match="no contract declares a matching produces template"):
-        Orchestrate()._resolve("/mnt/data/mystery.nc", ["momma"])
-    with pytest.raises(ValueError, match="--module-file MODULE="):
-        Orchestrate()._resolve("/mnt/data/mystery.nc", ["momma"])
-
-
 # --- the whole parse ------------------------------------------------------------------
 
 
 def test_parse_resolves_the_worked_example_against_the_workbook():
-    targets = Orchestrate().parse([(None, MOMMA), (None, METROMAN)], WORKBOOK)
+    targets = Orchestrate().parse([("momma", MOMMA), ("metroman", METROMAN)], WORKBOOK)
     assert [t.module for t in targets] == ["metroman", "momma"]
     assert all(isinstance(t.rules, OutputRulesParser) for t in targets)
     assert {t.rules for t in targets} == {targets[0].rules}, "one parser shared by the run"
@@ -188,18 +139,11 @@ def test_parse_resolves_the_worked_example_against_the_workbook():
 
 def test_parse_groups_several_files_under_one_module():
     targets = Orchestrate().parse(
-        [(None, MOMMA), (None, "/mnt/data/flpe/momma/74291800011_momma.nc")], WORKBOOK
+        [("momma", MOMMA), ("momma", "/mnt/data/flpe/momma/74291800011_momma.nc")], WORKBOOK
     )
     assert len(targets) == 1
     assert targets[0].module == "momma"
     assert len(targets[0].module_files) == 2
-
-
-def test_parse_resolves_a_momma_file_and_a_sos_granule_with_no_tags():
-    """The asymmetry is gone: both sides of a real run resolve from their declared templates."""
-    granule = "/mnt/data/output/sos/af_sword_v17_SOS_results.nc"
-    targets = Orchestrate().parse([(None, MOMMA), (None, granule)], WORKBOOK)
-    assert [t.module for t in targets] == ["momma", "output"]
 
 
 def test_parse_accepts_an_explicit_module_name():
@@ -208,8 +152,8 @@ def test_parse_accepts_an_explicit_module_name():
     assert targets[0].module_files == (Path("/mnt/data/anything.nc"),)
 
 
-def test_parse_without_a_workbook_matches_against_the_bundled_contracts(caplog):
-    targets = Orchestrate().parse([(None, MOMMA)])
+def test_parse_without_a_workbook_warns_and_produces_no_rules(caplog):
+    targets = Orchestrate().parse([("momma", MOMMA)])
     assert targets[0].module == "momma"
     assert targets[0].rules is None
     assert "no --rule-file" in caplog.text
@@ -217,7 +161,7 @@ def test_parse_without_a_workbook_matches_against_the_bundled_contracts(caplog):
 
 def test_parse_without_a_workbook_is_an_error_under_strict():
     with pytest.raises(ValueError, match="--strict requires a rules source"):
-        Orchestrate().parse([(None, MOMMA)], strict=True)
+        Orchestrate().parse([("momma", MOMMA)], strict=True)
 
 
 def test_the_rules_source_covers_the_file_it_is_named_for():
@@ -234,7 +178,7 @@ def test_parse_warns_when_a_module_is_in_neither_the_groups_nor_the_source(caplo
 
 def test_parse_rejects_an_unregistered_rules_source():
     with pytest.raises(ValueError, match="no rules parser is registered as 'nope'"):
-        Orchestrate().parse([(None, MOMMA)], WORKBOOK, "nope")
+        Orchestrate().parse([("momma", MOMMA)], WORKBOOK, "nope")
 
 
 # --- the registry ---------------------------------------------------------------------
