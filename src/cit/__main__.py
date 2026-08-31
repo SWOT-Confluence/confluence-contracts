@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import NoReturn
 
 from cit.orchestrate import Orchestrate
-from cit.parse import DEFAULT_RULE_NAME, RulesParser
 from cit.report import DEFAULT_MAX_FILES, ValidationSource
 
 _CHECKS_ALL = "all"
@@ -62,24 +61,59 @@ def _validate(args: argparse.Namespace) -> int:
     return report.exit_code
 
 
-def _module_file(value: str) -> tuple[str | None, str]:
-    """Parse a ``--module-file`` value, which may name its module explicitly.
+def _pair(value: str) -> tuple[str, str]:
+    """Parse a strict ``MODULE=PATH`` tagged value for ``--module-file`` and ``--rule-file``.
 
-    ``PATH`` alone is the everyday form -- the module is matched from the filename against the
-    groups the rules source declares. ``MODULE=PATH`` states it outright, for a file whose name
-    does not carry its module or a module the rules source does not know.
+    Both flags require an explicit name tag. Bare paths are rejected so the module identity
+    of a committed contract is always something the user typed, never inferred from a filename.
 
     Args:
-        value: The raw argument, e.g. ``/mnt/data/flpe/momma/12590000211_momma.nc`` or
-            ``momma=/mnt/data/somewhere/results.nc``.
+        value: The raw argument, e.g. ``momma=/mnt/data/flpe/momma/12590000211_momma.nc``
+            or ``output=docs/sos-dataset/sos_metadata.xlsx``.
 
     Returns:
-        An ``(explicit_module_name_or_None, path)`` pair.
+        A ``(name, path)`` pair, with whitespace stripped from both sides of the ``=``.
+
+    Raises:
+        argparse.ArgumentTypeError: If the value contains no ``=`` separator, or if either
+            the name or the path is empty after stripping whitespace.
     """
-    name, separator, tail = value.partition("=")
-    if separator and "/" not in name and name.strip() and tail.strip():
-        return name.strip(), tail.strip()
-    return None, value.strip()
+    name, sep, tail = value.partition("=")
+    name, tail = name.strip(), tail.strip()
+    if not sep or not name or not tail:
+        raise argparse.ArgumentTypeError(f"expected MODULE=VALUE, got {value!r}")
+    return name, tail
+
+
+class _SingleAction(argparse.Action):
+    """Custom action for ``--rule-file``: accumulate ``(name, path)`` pairs, reject duplicates.
+
+    Allows ``--rule-file`` to be repeated (once per distinct rules source), but raises an
+    argparse error if the same name appears twice, since a second workbook under the same
+    registry key would be silently ignored at parse time.
+    """
+
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: tuple[str, str],
+        option_string: str | None = None,
+    ) -> None:
+        """Append ``values`` to the accumulated list, rejecting a repeated name.
+
+        Args:
+            parser: The argument parser, used to emit the error.
+            namespace: The in-progress parsed namespace.
+            values: The ``(name, path)`` pair produced by :func:`_pair`.
+            option_string: The option string used on the command line (e.g. ``--rule-file``).
+        """
+        current: list[tuple[str, str]] = getattr(namespace, self.dest) or []
+        name, _ = values
+        for existing_name, _ in current:
+            if existing_name == name:
+                parser.error(f"--rule-file {name!r} appears more than once")
+        setattr(namespace, self.dest, [*current, values])
 
 
 def _parse(args: argparse.Namespace) -> int:
@@ -98,15 +132,22 @@ def _parse(args: argparse.Namespace) -> int:
     """
     if not args.module_file:
         raise SystemExit(
-            "cit parse: --module-file PATH is required (a result file to draft a contract "
-            "from; repeat it for each file)."
+            "cit parse: --module-file MODULE=PATH is required (a result file to draft a "
+            "contract from; repeat it for each file)."
         )
 
     orchestrate = Orchestrate()
     try:
-        targets = orchestrate.parse(
-            args.module_file, args.rule_file, args.rules, strict=args.strict
-        )
+        # args.rule_file is [(rule_name, path), ...] or None.  The existing orchestrate
+        # interface takes a single (rule_file, rule_name) pair; Step 3 will update it to
+        # accept the full mapping once the parse plan is in place.
+        if args.rule_file:
+            rule_name, rule_file_path = args.rule_file[0]
+            targets = orchestrate.parse(
+                args.module_file, rule_file_path, rule_name, strict=args.strict
+            )
+        else:
+            targets = orchestrate.parse(args.module_file, strict=args.strict)
     except ValueError as error:
         raise SystemExit(f"cit parse: {error}") from error
 
@@ -259,49 +300,39 @@ def build_parser() -> argparse.ArgumentParser:
         help="Generate a draft contract from a result file.",
         parents=[sub_shared],
         epilog=(
-            "A module's name, the SoS group it writes, and the workbook tab holding that "
-            "group's metadata are all the same string, so none of them is a separate "
-            "argument: name the result files and the workbook, and the rest follows.\n"
+            "Every value is tagged MODULE=PATH; bare paths are rejected.\n"
             "\n"
             "  cit parse \\\n"
-            "      --module-file .../flpe/momma/12590000211_momma.nc \\\n"
-            "      --module-file .../flpe/metroman/12590000211_metroman.nc \\\n"
-            "      --rule-file docs/sos-dataset/sos_metadata.xlsx"
+            "      --module-file momma=.../flpe/momma/12590000211_momma.nc \\\n"
+            "      --module-file metroman=.../flpe/metroman/12590000211_metroman.nc \\\n"
+            "      --rule-file   output=docs/sos-dataset/sos_metadata.xlsx"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parse.add_argument(
         "--module-file",
         action="append",
-        type=_module_file,
+        type=_pair,
         default=None,
-        metavar="PATH",
+        metavar="MODULE=PATH",
         dest="module_file",
         help=(
-            "A result file to draft a contract from (repeatable). Its module is matched from "
-            "the filename against the groups the rules source declares; write MODULE=PATH to "
-            "state it outright."
+            "A result file to draft a contract from (repeatable, MODULE=PATH required). "
+            "Repeat with the same MODULE to add more files to that module's contract. "
+            "The tag is the name the drafted contract is committed under."
         ),
     )
     parse.add_argument(
         "--rule-file",
+        action=_SingleAction,
+        type=_pair,
         default=None,
-        metavar="PATH",
+        metavar="RULES=PATH",
         dest="rule_file",
         help=(
-            "The SoS metadata workbook supplying every module's metadata -- one workbook for "
-            "the whole run, with one tab per module. Omit it to draft contracts with no SoS "
-            "metadata merged in."
-        ),
-    )
-    parse.add_argument(
-        "--rules",
-        default=DEFAULT_RULE_NAME,
-        choices=RulesParser.names(),
-        metavar="NAME",
-        help=(
-            "Which rules parser reads --rule-file (default: %(default)s). This names the rules "
-            f"*source*, not a module: {', '.join(RulesParser.names())}."
+            "A rules source to merge SoS metadata from (repeatable, RULES=PATH required). "
+            "The tag is the registered rules-parser name (e.g. ``output``), which selects the "
+            "parser class and the workbook tabs to read. Each name may appear at most once."
         ),
     )
     parse.add_argument(

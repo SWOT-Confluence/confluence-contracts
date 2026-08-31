@@ -1,35 +1,43 @@
 """Tests for resolving ``cit parse``'s result files to modules and picking the rules parser."""
 
+import argparse
 from pathlib import Path
 
 import pytest
 
-from cit.__main__ import _module_file, build_parser
+from cit.__main__ import _pair, build_parser
 from cit.orchestrate import Orchestrate
-from cit.parse import DEFAULT_RULE_NAME, OutputRulesParser, RulesParser
+from cit.parse import OutputRulesParser, RulesParser
 
 WORKBOOK = "docs/sos-dataset/sos_metadata.xlsx"
 MOMMA = "/mnt/data/flpe/momma/12590000211_momma.nc"
 METROMAN = "/mnt/data/flpe/metroman/12590000211_metroman.nc"
 
 
-# --- --module-file values ------------------------------------------------------------
+# --- _pair splitter (strict MODULE=PATH) ----------------------------------------------
 
 
-def test_a_bare_path_leaves_the_module_to_be_matched():
-    assert _module_file(MOMMA) == (None, MOMMA)
+def test_pair_accepts_tagged_value():
+    """A tagged MODULE=PATH value is split into (name, path)."""
+    assert _pair(f"momma={MOMMA}") == ("momma", MOMMA)
 
 
-def test_module_equals_path_states_the_module_outright():
-    assert _module_file(f"momma={MOMMA}") == ("momma", MOMMA)
+def test_pair_rejects_bare_path():
+    """A bare path with no = is rejected with an informative message."""
+    with pytest.raises(argparse.ArgumentTypeError, match="expected MODULE=VALUE"):
+        _pair(MOMMA)
 
 
-def test_an_equals_inside_a_path_is_not_a_module_name():
-    """A templated or oddly named path keeps its = rather than losing its head to it."""
-    assert _module_file("/mnt/data/a=b/12590000211_momma.nc") == (
-        None,
-        "/mnt/data/a=b/12590000211_momma.nc",
-    )
+def test_pair_rejects_empty_name():
+    """A value starting with = (no module name before it) is rejected."""
+    with pytest.raises(argparse.ArgumentTypeError, match="expected MODULE=VALUE"):
+        _pair(f"={MOMMA}")
+
+
+def test_pair_rejects_empty_value():
+    """A value ending with = (no path after it) is rejected."""
+    with pytest.raises(argparse.ArgumentTypeError, match="expected MODULE=VALUE"):
+        _pair("momma=")
 
 
 # --- argparse wiring ------------------------------------------------------------------
@@ -37,23 +45,43 @@ def test_an_equals_inside_a_path_is_not_a_module_name():
 
 def test_the_worked_example_parses():
     args = build_parser().parse_args(
-        ["parse", "--module-file", MOMMA, "--module-file", METROMAN, "--rule-file", WORKBOOK]
+        [
+            "parse",
+            "--module-file",
+            f"momma={MOMMA}",
+            "--module-file",
+            f"metroman={METROMAN}",
+            "--rule-file",
+            f"output={WORKBOOK}",
+        ]
     )
-    assert args.module_file == [(None, MOMMA), (None, METROMAN)]
-    assert args.rule_file == WORKBOOK
-    assert args.rules == DEFAULT_RULE_NAME
+    assert args.module_file == [("momma", MOMMA), ("metroman", METROMAN)]
+    assert args.rule_file == [("output", WORKBOOK)]
     assert args.strict is False
 
 
-def test_rule_file_is_one_workbook_not_one_per_module():
-    """The workbook holds every module's tab, so --rule-file takes a single value."""
-    args = build_parser().parse_args(["parse", "--rule-file", WORKBOOK])
-    assert isinstance(args.rule_file, str)
+def test_rule_file_accepts_tagged_value():
+    """--rule-file RULES=PATH is accepted and stored as a list of one (name, path) pair."""
+    args = build_parser().parse_args(["parse", "--rule-file", f"output={WORKBOOK}"])
+    assert args.rule_file == [("output", WORKBOOK)]
 
 
-def test_rules_only_accepts_a_registered_parser():
+def test_untagged_module_file_is_rejected():
+    """A bare path on --module-file is rejected by argparse."""
     with pytest.raises(SystemExit):
-        build_parser().parse_args(["parse", "--rules", "momma"])
+        build_parser().parse_args(["parse", "--module-file", MOMMA])
+
+
+def test_untagged_rule_file_is_rejected():
+    """A bare path on --rule-file is rejected by argparse."""
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["parse", "--rule-file", WORKBOOK])
+
+
+def test_rules_is_gone():
+    """The --rules flag no longer exists; an unknown flag raises SystemExit."""
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["parse", "--rules", "output"])
 
 
 def test_sos_group_is_gone():
@@ -62,10 +90,40 @@ def test_sos_group_is_gone():
         build_parser().parse_args(["parse", "--sos-group", "momma"])
 
 
+def test_module_file_repeats_accumulate():
+    """Repeating --module-file with the same module name accumulates both entries."""
+    momma2 = "/mnt/data/flpe/momma/74291800011_momma.nc"
+    args = build_parser().parse_args(
+        [
+            "parse",
+            "--module-file",
+            f"momma={MOMMA}",
+            "--module-file",
+            f"momma={momma2}",
+        ]
+    )
+    assert args.module_file == [("momma", MOMMA), ("momma", momma2)]
+
+
+def test_rule_file_duplicate_name_errors():
+    """Repeating --rule-file with the same rules name is rejected by argparse."""
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(
+            [
+                "parse",
+                "--rule-file",
+                f"output={WORKBOOK}",
+                "--rule-file",
+                "output=other.xlsx",
+            ]
+        )
+
+
 def test_module_file_default_is_not_shared_across_calls():
-    first = build_parser().parse_args(["parse", "--module-file", MOMMA])
+    """The classic action='append' + mutable default trap: default must not accumulate."""
+    first = build_parser().parse_args(["parse", "--module-file", f"momma={MOMMA}"])
     second = build_parser().parse_args(["parse"])
-    assert first.module_file == [(None, MOMMA)]
+    assert first.module_file == [("momma", MOMMA)]
     assert second.module_file is None
 
 
