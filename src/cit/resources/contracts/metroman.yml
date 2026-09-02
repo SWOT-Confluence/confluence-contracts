@@ -33,62 +33,62 @@ module:
         - nt
         required: true
         attrs:
-          long_name: average/allq
+          long_name: allq
       average/A0hat:
         dtype: f8
         dimensions: []
         required: true
         attrs:
-          long_name: average/A0hat
+          long_name: A0hat
       average/nahat:
         dtype: f8
         dimensions: []
         required: true
         attrs:
-          long_name: average/nahat
+          long_name: nahat
       average/x1hat:
         dtype: f8
         dimensions: []
         required: true
         attrs:
-          long_name: average/x1hat
+          long_name: x1hat
       average/q_u:
         dtype: f8
         dimensions:
         - nt
         required: true
         attrs:
-          long_name: average/q_u
-      12590000211/allq:
+          long_name: q_u
+      '{reach_set}/allq':
         dtype: f8
         dimensions:
         - nt
         required: true
         attrs:
-          long_name: 12590000211/allq
-      12590000211/A0hat:
+          long_name: allq
+      '{reach_set}/A0hat':
         dtype: f8
         dimensions: []
         required: true
         attrs:
-          long_name: 12590000211/A0hat
-      12590000211/nahat:
+          long_name: A0hat
+      '{reach_set}/nahat':
         dtype: f8
         dimensions: []
         required: true
         attrs:
-          long_name: 12590000211/nahat
-      12590000211/x1hat:
+          long_name: nahat
+      '{reach_set}/x1hat':
         dtype: f8
         dimensions: []
         required: true
         attrs:
-          long_name: 12590000211/x1hat
-      12590000211/q_u:
+          long_name: x1hat
+      '{reach_set}/q_u':
         dtype: f8
         dimensions:
         - nt
         required: true
         attrs:
-          long_name: 12590000211/q_u
+          long_name: q_u
   consumes: []

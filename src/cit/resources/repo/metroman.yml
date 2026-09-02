@@ -1,4 +1,7 @@
 filepath: flpe/metroman/{reach_id}_metroman.nc
+# MetroMan names each group after the reach set it covers, so those names vary per file.
+group_placeholder: reach_set
+literal_groups: [average]
 source:
   repo: metroman
   github_username: SWOT-Confluence

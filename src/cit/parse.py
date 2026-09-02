@@ -35,24 +35,43 @@ from pathlib import Path
 from typing import ClassVar, get_args
 
 import yaml
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from cit.contract import (
+    Contract,
+    DataType,
+    ModuleContract,
+    Produces,
+    Source,
+    VariableAttrs,
+    VariableContract,
+)
 from cit.data import load_yaml, match_result_filename
-from cit.contract import Contract, DataType, ModuleContract, Produces, Source, VariableAttrs, VariableContract
 from cit.result import NetcdfResult
 
-
-logger = logging.getLogger(__name__)   # "cit.orchestrate" — child of "cit"
+logger = logging.getLogger(__name__)   # "cit.parse" — child of "cit"
 _REPO_CONFIG = ConfigDict(extra="forbid", frozen=True, str_strip_whitespace=True)
 
 
 class RepoConfig(BaseModel):
-    """One module's hand-maintained parse inputs: its path template and provenance."""
+    """One module's hand-maintained parse inputs: its path template and provenance.
+
+    Attributes:
+        filepath: The ``Produces.filepath`` template this module writes to.
+        source: Provenance of the module version this config describes.
+        group_placeholder: Name to declare a module's file-specific groups under, e.g.
+            ``reach_set`` gives ``{reach_set}/allq``. ``None`` when every group name is part of
+            the interface, which is every module but metroman.
+        literal_groups: Groups whose names *are* part of the interface, declared as read.
+            Metroman's ``average`` is one; its other groups are named per file.
+    """
 
     model_config = _REPO_CONFIG
 
     filepath: str
     source: Source
+    group_placeholder: str | None = None
+    literal_groups: list[str] = Field(default_factory=list)
 
 
 class Parser(ABC):
@@ -102,6 +121,9 @@ class ContractParser(Parser):
         Args:
             module: The module name -- the identity the drafted contract is committed under.
             module_file: The produced result file to draft a contract from.
+            repo_config: Path to this module's ``resources/repo/<module>.yml`` (see
+                :class:`RepoConfig`).
+            version: The Confluence version the drafted contract targets.
         """
         self.module = module
         self.module_file = Path(module_file)
@@ -128,7 +150,7 @@ class ContractParser(Parser):
             produces = Produces(
                 filepath=repo_config.filepath,
                 dimensions=list(result.dimensions),
-                variables=self._variables(result),
+                variables=self._variables(result, repo_config),
             )
 
         # Create contract
@@ -145,27 +167,99 @@ class ContractParser(Parser):
         output_file = Path(__file__).resolve().parent / "resources" / "contracts" / f"{self.module}.yml"
         self.write(data=contract, output=output_file)
 
-    def _variables(self, result: NetcdfResult) -> dict[str, VariableContract]:
-        """"""
-        variables = {}
+    def _variables(
+        self, result: NetcdfResult, repo_config: RepoConfig
+    ) -> dict[str, VariableContract]:
+        """Draft one declaration per variable the exemplar file holds.
+
+        Variables are walked in file order, so redrafting the same file gives the same output. A
+        dtype outside the contract vocabulary is skipped with a warning rather than raising: one
+        exotic variable must not block a whole draft, and the next ``cit validate`` reports the
+        omission as EXTRA anyway.
+
+        Args:
+            result: The read model for the exemplar file.
+            repo_config: This module's parse inputs, which say how its groups are declared.
+
+        Returns:
+            The drafted variables, keyed as the contract declares them.
+        """
+        variables: dict[str, VariableContract] = {}
+
         for name, info in result.variables.items():
             if info.dtype not in get_args(DataType):
                 logger.warning("skipping %r: dtype %r is not in the contract vocabulary %s",
                                 name, info.dtype, get_args(DataType))
                 continue
 
-            variables[name] = VariableContract(
+            key = self._declared_as(name, repo_config)
+            variable = VariableContract(
                 dtype=info.dtype,
                 dimensions=list(info.dims),
                 required=True,
-                attrs=self._attrs(name, result.variable_attributes.get(name, {})),
+                attrs=self._attrs(key, result.variable_attributes.get(name, {})),
             )
+
+            declared = variables.get(key)
+            if declared is not None:
+                if (declared.dtype, declared.dimensions) != (variable.dtype, variable.dimensions):
+                    logger.warning(
+                        "%s: %r collapses to %r but declares (dtype %s, dims %s) against an "
+                        "earlier group's (dtype %s, dims %s); keeping the first -- hand-review it",
+                        self.module, name, key, variable.dtype, variable.dimensions,
+                        declared.dtype, declared.dimensions,
+                    )
+                continue
+
+            variables[key] = variable
+
         return variables
 
+    def _declared_as(self, name: str, repo_config: RepoConfig) -> str:
+        """Return the contract key one file variable is declared under.
+
+        Metroman names each group after the reach set it covers, and a file holds one to several
+        of them, so those names belong to the file rather than to the interface. Replacing the
+        group with the placeholder collapses every copy of a variable into one declaration, which
+        :meth:`cit.validation.ContractValidator._expand_variables` resolves back per file.
+
+        Args:
+            name: The variable's qualified name as read (``group/var`` when nested).
+            repo_config: This module's parse inputs.
+
+        Returns:
+            The name unchanged, or its leading group replaced by the placeholder.
+        """
+        if repo_config.group_placeholder is None or "/" not in name:
+            return name
+
+        # Only the leading segment, so a placeholder always stands for exactly one segment.
+        group, _, remainder = name.partition("/")
+        if group in repo_config.literal_groups:
+            return name
+
+        return f"{{{repo_config.group_placeholder}}}/{remainder}"
+
     def _attrs(self, var_name: str, result_attrs: dict) -> VariableAttrs | None:
-        """"""
+        """Draft one variable's SoS metadata block from the attributes the file carries.
+
+        Attributes the contract has no field for are dropped, not rejected: ``_FillValue`` is on
+        nearly every variable, and :class:`cit.validation.RulesValidator` checks its value per
+        dtype rather than per variable. A block the model rejects -- junk
+        ``coverage_content_type``, an inverted bound pair -- degrades to no attributes with a
+        warning, so one bad variable never costs the whole draft.
+
+        Args:
+            var_name: The name this variable is declared under.
+            result_attrs: The attributes the file carries for it.
+
+        Returns:
+            The drafted attributes, or ``None`` when the file's cannot make a valid block.
+        """
         fields = {k: v for k, v in result_attrs.items() if k in VariableAttrs.model_fields}
-        fields.setdefault("long_name", var_name)
+
+        # long_name is mandatory but often absent; the variable's own name is what review replaces.
+        fields.setdefault("long_name", var_name.rpartition("/")[-1])
         try:
             return VariableAttrs(**fields)
         except ValidationError as error:

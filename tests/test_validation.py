@@ -295,3 +295,120 @@ def test_discover_instantiates_contract_validator():
     validators = Validator.discover()
 
     assert any(isinstance(validator, ContractValidator) for validator in validators)
+
+
+# --- templated group keys (metroman writes one group per reach set) --------------------
+
+# One variable declared twice: under the placeholder, and for the fixed 'average' group.
+REACH_SET = {
+    "{reach_set}/allq": {"dtype": "f8", "dimensions": ["nt"], "required": True},
+    "average/allq": {"dtype": "f8", "dimensions": ["nt"], "required": True},
+}
+
+
+def _write_grouped_nc(path: Path, dimensions: dict[str, int], groups: dict[str, dict]) -> None:
+    """Write a NetCDF file whose variables live in groups.
+
+    Args:
+        path: Where to write the ``.nc`` file.
+        dimensions: Root dimension sizes as ``{name: size}``, inherited by every group.
+        groups: Variables per group, as ``{group: {name: (dtype_token, dim_names)}}``.
+    """
+    ds = nc.Dataset(path, "w")
+    for name, size in dimensions.items():
+        ds.createDimension(name, size)
+    for group_name, variables in groups.items():
+        group = ds.createGroup(group_name)
+        for name, (dtype, dims) in variables.items():
+            group.createVariable(name, dtype, dims)
+    ds.close()
+
+
+@pytest.fixture
+def validate_groups(tmp_path):
+    """Return a callable that validates a contract against a freshly written grouped file."""
+
+    def _validate(contract, dimensions, groups):
+        path = tmp_path / "grouped.nc"
+        _write_grouped_nc(path, dimensions, groups)
+        with NetcdfResult(str(path)) as result:
+            context = ValidatorContext(MODULE, contract, [], result)
+            return ContractValidator().validate(context)
+
+    return _validate
+
+
+def test_templated_key_matches_every_group_it_describes(validate_groups):
+    """One {reach_set} declaration is checked against each reach-set group the file holds."""
+    findings = validate_groups(
+        _contract(REACH_SET),
+        {"nt": 3},
+        {
+            "average": {"allq": ("f8", ("nt",))},
+            "12780800021-12780800011": {"allq": ("f8", ("nt",))},
+            "12780800031-12780800021": {"allq": ("f8", ("nt",))},
+        },
+    )
+
+    for group in ("12780800021-12780800011", "12780800031-12780800021"):
+        passed = _for(findings, f"{group}/allq")
+        assert [f.type for f in passed] == [FindingType.PASSED]
+
+    # Resolved names are reported, so no finding is ever filed against the raw template.
+    assert _for(findings, "{reach_set}/allq") == []
+
+
+def test_a_literal_group_is_not_also_claimed_by_a_template(validate_groups):
+    """average/allq is declared literally, so the template does not double-report it."""
+    findings = validate_groups(
+        _contract(REACH_SET),
+        {"nt": 3},
+        {"average": {"allq": ("f8", ("nt",))}, "12780800021": {"allq": ("f8", ("nt",))}},
+    )
+
+    passed = _for(findings, "average/allq")
+    assert [f.type for f in passed] == [FindingType.PASSED]
+    assert not [f for f in findings if f.type is FindingType.EXTRA]
+
+
+def test_a_templated_key_matching_no_group_fails_under_its_template(validate_groups):
+    """A file with only the fixed group is missing every reach-set variable."""
+    findings = validate_groups(
+        _contract(REACH_SET), {"nt": 3}, {"average": {"allq": ("f8", ("nt",))}}
+    )
+
+    missing = _for(findings, "{reach_set}/allq")
+    assert [(f.type, f.status) for f in missing] == [(FindingType.MISSING, FindingStatus.FAIL)]
+
+
+def test_a_templated_key_matching_no_group_warns_when_optional(validate_groups):
+    """Requiredness carries onto the template, exactly as for a literal key."""
+    optional = {"{reach_set}/allq": {"dtype": "f8", "dimensions": ["nt"], "required": False}}
+    findings = validate_groups(_contract(optional), {"nt": 3}, {"average": {}})
+
+    missing = _for(findings, "{reach_set}/allq")
+    assert [(f.type, f.status) for f in missing] == [(FindingType.MISSING, FindingStatus.WARN)]
+
+
+def test_structure_is_checked_per_matched_group(validate_groups):
+    """One group disagreeing on dtype fails alone; its siblings still pass."""
+    findings = validate_groups(
+        _contract(REACH_SET),
+        {"nt": 3},
+        {
+            "average": {"allq": ("f8", ("nt",))},
+            "12780800021": {"allq": ("f8", ("nt",))},
+            "12780800031": {"allq": ("i4", ("nt",))},
+        },
+    )
+
+    bad = _for(findings, "12780800031/allq")
+    assert [(f.type, f.status) for f in bad] == [(FindingType.DIFFERENT, FindingStatus.FAIL)]
+    assert [f.type for f in _for(findings, "12780800021/allq")] == [FindingType.PASSED]
+
+
+def test_an_untemplated_contract_is_unaffected(validate):
+    """Expansion is a no-op for a contract whose keys hold no placeholder."""
+    findings = validate(_contract(STAGE_ONLY), {"nt": 3}, {"stage": ("f8", ("nt",))})
+
+    assert [f.type for f in _for(findings, "stage")] == [FindingType.PASSED]

@@ -19,6 +19,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 
 from cit.contract import Produces, VariableContract
+from cit.data import is_templated, match_variables
 from cit.report import Check, Finding, FindingStatus, FindingType, ValidationSource
 from cit.result import NetcdfResult, VarInfo
 from cit.rules import MetadataRules
@@ -309,16 +310,50 @@ class ContractValidator(Validator):
             optional) and every undeclared file variable (WARN), plus the structural findings
             for the variables present on both sides.
         """
+        declared = self._expand_variables(contract.variables, result.variables)
+
         return report.partition(
-            contract.variables,
+            declared,
             result.variables,
             scope="variable",
             check=Check.EXISTS,
-            missing_status=lambda name: _status(contract.variables[name].required),
+            missing_status=lambda name: _status(declared[name].required),
             on_common=lambda name: self._check_variable(
-                report, name, contract.variables[name], result.variables[name]
+                report, name, declared[name], result.variables[name]
             ),
         )
+
+    def _expand_variables(
+        self, declared: dict[str, VariableContract], actual: Iterable[str]
+    ) -> dict[str, VariableContract]:
+        """Re-key templated declarations by the variable names the file actually holds.
+
+        A key like ``{reach_set}/allq`` stands for a group whose name varies per file (see
+        :meth:`cit.parse.ContractParser._declared_as`). Expanding it to every variable it matches
+        leaves dtype, dimensions and requiredness to the same comparison every other variable
+        goes through, once per group the file holds.
+
+        Args:
+            declared: The contract's variables, keyed as declared.
+            actual: The qualified variable names the file holds.
+
+        Returns:
+            The same declarations, keyed by real variable names.
+        """
+        literals = {key: var for key, var in declared.items() if not is_templated(key)}
+        expanded = dict(literals)
+
+        for key, variable in declared.items():
+            if not is_templated(key):
+                continue
+
+            # Literals win, so a fixed group is never also claimed by a template.
+            matched = [name for name in match_variables(key, actual) if name not in literals]
+
+            # An unmatched template is kept, so it reports MISSING instead of disappearing.
+            expanded.update(dict.fromkeys(matched, variable) if matched else {key: variable})
+
+        return expanded
 
     def _check_variable(
         self,

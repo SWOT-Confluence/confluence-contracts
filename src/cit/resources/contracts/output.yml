@@ -1080,7 +1080,7 @@ module:
         - num_algos_offline
         required: true
         attrs:
-          long_name: validation/offline/pearsonr
+          long_name: pearsonr
       validation/offline/sige:
         dtype: f8
         dimensions:
@@ -1215,7 +1215,7 @@ module:
         - num_algos
         required: true
         attrs:
-          long_name: validation/moi/pearsonr
+          long_name: pearsonr
       validation/moi/sige:
         dtype: f8
         dimensions:
@@ -1350,7 +1350,7 @@ module:
         - num_algos
         required: true
         attrs:
-          long_name: validation/flpe/pearsonr
+          long_name: pearsonr
       validation/flpe/sige:
         dtype: f8
         dimensions:

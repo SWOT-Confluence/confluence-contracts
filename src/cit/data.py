@@ -13,6 +13,7 @@ id or continent a file belongs to.
 """
 
 import re
+from collections.abc import Iterable
 from importlib.resources import files
 from pathlib import Path
 
@@ -76,6 +77,37 @@ def match_result_filename(filepath: str, name: str) -> dict[str, str] | None:
     """
     matched = _compile_template(Path(filepath).name).fullmatch(name)
     return matched.groupdict() if matched else None
+
+
+def match_variables(template: str, names: Iterable[str]) -> list[str]:
+    """Return every variable name a templated contract key matches.
+
+    Unlike :func:`match_result_filename`, the whole qualified name is matched rather than just
+    its last segment, so a placeholder stands for exactly one path segment -- which is what lets
+    a contract declare a group whose name varies per file (see
+    :meth:`cit.parse.ContractParser._declared_as`).
+
+    Args:
+        template: A ``Produces.variables`` key.
+        names: The qualified variable names a result file holds.
+
+    Returns:
+        The matching names, in the order given.
+    """
+    matcher = _compile_template(template)
+    return [name for name in names if matcher.fullmatch(name)]
+
+
+def is_templated(name: str) -> bool:
+    """Whether a contract name carries a ``{placeholder}`` and so needs resolving.
+
+    Args:
+        name: A ``Produces.variables`` key or a ``Produces.filepath`` template.
+
+    Returns:
+        True when the name holds at least one ``{placeholder}``.
+    """
+    return _PLACEHOLDER.search(name) is not None
 
 
 def find_result_files(mount_path: str, filepath: str) -> list[Path]:
