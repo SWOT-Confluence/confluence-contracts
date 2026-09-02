@@ -2,7 +2,7 @@
 
 The one layer with no local precedent in the Confluence codebase. Everything that reads a
 ``.nc`` file goes through here so the format details live in exactly one module, shared by
-both the reader (:mod:`cit.result`) and the contract parser (:mod:`cit.parser`).
+both the reader (:mod:`cit.result`) and the contract parser (:mod:`cit.parse`).
 
 Attribute reads are split from structural iteration so a structural-only run does not pay to
 read metadata; :mod:`cit.result` must not read netCDF4 directly and instead assembles its own

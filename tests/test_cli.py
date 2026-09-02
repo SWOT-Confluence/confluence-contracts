@@ -94,7 +94,7 @@ def test_validate_checks_rejects_an_invalid_value():
 
 
 def _make_two_file_stub(captured_kwargs):
-    """Build a fake Orchestrate whose run() records its kwargs and returns a two-file report."""
+    """Build a fake Orchestrate whose validate() records its kwargs, returning a two-file report."""
     finding = Finding(
         type=FindingType.MISSING,
         status=FindingStatus.WARN,
@@ -119,10 +119,8 @@ def _make_two_file_stub(captured_kwargs):
     )
 
     class _StubOrchestrate:
-        def __init__(self, data_mount):
+        def validate(self, data_mount, *, strict=False, modules=None, **kwargs):
             self.data_mount = data_mount
-
-        def run(self, strict=False, modules=None, **kwargs):
             captured_kwargs.update(kwargs)
             return Report([finding, other], **kwargs)
 
@@ -177,8 +175,8 @@ def test_max_files_set_to_default_value_still_enables_show_files(monkeypatch, ca
     assert captured_kwargs["max_files"] == DEFAULT_MAX_FILES
 
 
-def test_checks_value_reaches_orchestrate_run(monkeypatch):
-    """--checks structure reaches orchestrate.run as ValidationSource.STRUCTURE, not the raw str."""
+def test_checks_value_reaches_orchestrate_validate(monkeypatch):
+    """--checks structure reaches Orchestrate.validate as ValidationSource.STRUCTURE, not a str."""
     captured_kwargs = {}
     monkeypatch.setattr("cit.__main__.Orchestrate", _make_two_file_stub(captured_kwargs))
     monkeypatch.setattr(
@@ -191,8 +189,8 @@ def test_checks_value_reaches_orchestrate_run(monkeypatch):
     assert captured_kwargs["checks"] is ValidationSource.STRUCTURE
 
 
-def test_checks_all_reaches_orchestrate_run_as_none(monkeypatch):
-    """The default --checks all reaches orchestrate.run as None (render every section)."""
+def test_checks_all_reaches_orchestrate_validate_as_none(monkeypatch):
+    """The default --checks all reaches Orchestrate.validate as None (render every section)."""
     captured_kwargs = {}
     monkeypatch.setattr("cit.__main__.Orchestrate", _make_two_file_stub(captured_kwargs))
     monkeypatch.setattr("sys.argv", ["cit", "validate", "--results", "/mnt/data"])
@@ -248,14 +246,12 @@ def test_main_exits_1_when_report_holds_a_fail(monkeypatch):
     report = Report([finding])
 
     class _StubOrchestrate:
-        def __init__(self, data_mount):
-            self.data_mount = data_mount
-
-        def run(
+        def validate(
             self,
+            data_mount,
+            *,
             strict=False,
             modules=None,
-            *,
             show_passed=False,
             show_files=False,
             max_files=5,
@@ -287,14 +283,12 @@ def test_main_exits_0_when_report_has_no_fail(monkeypatch, capsys):
     report = Report([finding])
 
     class _StubOrchestrate:
-        def __init__(self, data_mount):
-            self.data_mount = data_mount
-
-        def run(
+        def validate(
             self,
+            data_mount,
+            *,
             strict=False,
             modules=None,
-            *,
             show_passed=False,
             show_files=False,
             max_files=5,

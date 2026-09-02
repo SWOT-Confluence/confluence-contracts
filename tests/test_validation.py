@@ -9,7 +9,7 @@ dtype tokens and dimension tuples under test are the ones netCDF4 actually repor
 - everything agreeing -> PASSED.
 
 Dimensions get the same existence treatment; their *sizes* are deliberately not compared, since
-they vary per run. ``_partition`` is exercised directly because both directions of every
+they vary per run. ``partition`` is exercised directly because both directions of every
 comparison flow through it.
 """
 
@@ -21,7 +21,7 @@ import pytest
 from cit.contract import Produces
 from cit.report import FindingStatus, FindingType
 from cit.result import NetcdfResult
-from cit.validation import ContractValidator, Validator, ValidatorContext, _partition
+from cit.validation import ContractValidator, Validator, ValidatorContext, partition
 
 MODULE = "momma"
 FILEPATH = "flpe/momma/{reach_id}_momma.nc"
@@ -272,13 +272,13 @@ def test_grouped_variables_qualify_nested_names(validate):
     ],
 )
 def test_partition_splits_both_directions(contract_names, result_names, expected):
-    """_partition returns (missing, extra, common) from one pair of set differences."""
-    assert _partition(contract_names, result_names) == expected
+    """Partition returns (missing, extra, common) from one pair of set differences."""
+    assert partition(contract_names, result_names) == expected
 
 
 def test_partition_sorts_each_group():
     """Each group is sorted so report output does not depend on set iteration order."""
-    missing, extra, common = _partition(["d", "b", "z"], ["z", "a", "c"])
+    missing, extra, common = partition(["d", "b", "z"], ["z", "a", "c"])
 
     assert missing == ["b", "d"]
     assert extra == ["a", "c"]
@@ -287,7 +287,7 @@ def test_partition_sorts_each_group():
 
 def test_partition_accepts_mappings():
     """A mapping may be passed for either side; iterating one yields its keys."""
-    assert _partition({"a": 1, "b": 2}, {"b": 3}) == (["a"], [], ["b"])
+    assert partition({"a": 1, "b": 2}, {"b": 3}) == (["a"], [], ["b"])
 
 
 def test_discover_instantiates_contract_validator():

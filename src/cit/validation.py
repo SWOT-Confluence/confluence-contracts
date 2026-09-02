@@ -150,7 +150,7 @@ class _Reporter:
         Returns:
             The missing findings, then the extra ones, then whatever ``common`` produced.
         """
-        missing, extra, common = _partition(expected, actual)
+        missing, extra, common = partition(expected, actual)
         findings: list[Finding] = []
 
         for name in missing:
@@ -697,7 +697,7 @@ class RulesValidator(Validator):
         )
 
 
-def _partition(
+def partition(
     contract: Iterable[str], result: Iterable[str]
 ) -> tuple[list[str], list[str], list[str]]:
     """Split two sets of component names into what is missing, extra, and common to both.

@@ -7,6 +7,9 @@
 __pycache__/
 .beads.gate.lock
 
+# Microsoft Office lock files (e.g. ~$sos_metadata.xlsx)
+~$*
+
 # Package outputs
 findings.csv
 report.txt
