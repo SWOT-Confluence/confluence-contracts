@@ -15,6 +15,7 @@ metadata is read, never data arrays, so a result's footprint stays small regardl
 import functools
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import Self
 
 from cit.netcdf import Netcdf, numpy_to_token
 
@@ -65,7 +66,7 @@ class Result(ABC):
     def close(self) -> None:
         """Release any open file handle held by this result."""
 
-    def __enter__(self) -> "Result":
+    def __enter__(self) -> Self:
         """Enter a context that guarantees a :meth:`close` on exit.
 
         Returns:

@@ -1,0 +1,7 @@
+filepath: flpe/metroman/{reach_id}_metroman.nc
+source:
+  repo: metroman
+  github_username: SWOT-Confluence
+  branch: main
+  commit: 69e8a96e01c3e4064c8c0c6a828afc6fcb5c1406
+  image_tag: metroman:latest

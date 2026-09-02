@@ -177,6 +177,8 @@ class Orchestrate:
 
     def parse(
         self,
+        version: str,
+        repo_config: dict[str, str],
         module_files: Mapping[str, str],
         rule_files: Mapping[str, str] | None = None,
         *,
@@ -223,18 +225,19 @@ class Orchestrate:
             )
 
         contracts: dict[str, ContractParser] = {
-            module: ContractParser(module, Path(path))
+            module: ContractParser(module, Path(path), Path(repo_config[module]), version)
             for module, path in module_files.items()
         }
 
         plan = ParsePlan(contracts=contracts, rules=rules)
 
-        # Log the three-line summary so a library caller and the CLI see the same record.
-        logger.info("contracts: %s", ", ".join(f"'{m}'" for m in sorted(contracts)) or "none")
-        logger.info(
-            "rules:     %s",
-            ", ".join(f"'{n}' ({type(r).__name__})" for n, r in sorted(rules.items())) or "none",
-        )
-        logger.info("both:      %s", ", ".join(f"'{m}'" for m in plan.both) or "none")
+        for module_name, contract in plan.contracts.items():
+            contract.parse()
 
-        return plan
+        # # Log the three-line summary so a library caller and the CLI see the same record.
+        # logger.info("contracts: %s", ", ".join(f"'{m}'" for m in sorted(contracts)) or "none")
+        # logger.info(
+        #     "rules:     %s",
+        #     ", ".join(f"'{n}' ({type(r).__name__})" for n, r in sorted(rules.items())) or "none",
+        # )
+        # logger.info("both:      %s", ", ".join(f"'{m}'" for m in plan.both) or "none")

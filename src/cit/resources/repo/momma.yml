@@ -1,0 +1,7 @@
+filepath: flpe/momma/{reach_id}_momma.nc
+source:
+  repo: momma
+  github_username: SWOT-Confluence
+  branch: main
+  commit: 6e136cb6fa0c861ba1277c836748d8eb707dd98e
+  image_tag: momma:latest

@@ -1,56 +1,277 @@
-# Contract for the MOMMA FLPE module.
-#
-# STUB — authored in P1-11 from a `cit parse` draft (a sample momma .nc + the SoS rules
-# artifact), then hand-reviewed. Shipped as package data (src/cit/resources/contracts/) so the
-# runtime loads it via importlib.resources consistently in both editable and installed modes.
-#
-# Shape (see cit.models.Contract):
-#
-#   version: <confluence_version>          # the functional Confluence version this targets
-#   source:                                # provenance — cit.models.Source
-#     repo: momma
-#     github_username: <owner>
-#     branch: main
-#     commit: <sha>
-#     image_tag: <tag>
-#   module:                                # cit.models.ModuleContract
-#     name: momma
-#     produces:                            # list[cit.models.Produces]
-#       - filepath: flpe/momma/{reach_id}_momma.nc
-#         dimensions: [nt]
-#         variables:                       # dict[str, cit.models.VariableContract]
-#           stage: { dtype: f8, dimensions: [nt], required: true, attrs: { ... } }
-#           # ... ~37 momma variables (width, slope, Q_constrained, zero_flow_stage, ...)
-#     consumes: []                         # list[cit.models.Consumes] — feeds the cross-check
-
-version: "16.0"
+version: 5.0.0
 source:
   repo: momma
-  github_username: nikki-t
+  github_username: SWOT-Confluence
   branch: main
-  commit: 0123456789abcdef0123456789abcdef01234567
+  commit: 6e136cb6fa0c861ba1277c836748d8eb707dd98e
   image_tag: momma:latest
 module:
   name: momma
   produces:
-    - filepath: flpe/momma/{reach_id}_momma.nc
-      dimensions: [nt]
-      variables:
-        stage:
-          dtype: f8
-          dimensions: [nt]
-          required: true
-          attrs:
-            long_name: water surface elevation
-            comment: MOMMA-estimated stage
-            units: m
-            valid_min: -1000.0
-            valid_max: 1000.0
-            coverage_content_type: physicalMeasurement
-        time_str:
-          dtype: str
-          dimensions: [nt]
-          required: false
-  consumes:
-    - filepath: sword/{continent}_sword.nc
-      variables: [reach_id]
+  - filepath: flpe/momma/{reach_id}_momma.nc
+    dimensions:
+    - nt
+    variables:
+      nt:
+        dtype: i4
+        dimensions:
+        - nt
+        required: true
+        attrs:
+          long_name: nt
+          units: time
+      time_str:
+        dtype: str
+        dimensions:
+        - nt
+        required: true
+        attrs:
+          long_name: time_str
+          units: time
+      stage:
+        dtype: f8
+        dimensions:
+        - nt
+        required: true
+        attrs:
+          long_name: stage
+      width:
+        dtype: f8
+        dimensions:
+        - nt
+        required: true
+        attrs:
+          long_name: width
+      slope:
+        dtype: f8
+        dimensions:
+        - nt
+        required: true
+        attrs:
+          long_name: slope
+      Qgage:
+        dtype: f8
+        dimensions:
+        - nt
+        required: true
+        attrs:
+          long_name: Qgage
+      seg:
+        dtype: f8
+        dimensions:
+        - nt
+        required: true
+        attrs:
+          long_name: seg
+      n:
+        dtype: f8
+        dimensions:
+        - nt
+        required: true
+        attrs:
+          long_name: n
+      nb:
+        dtype: f8
+        dimensions:
+        - nt
+        required: true
+        attrs:
+          long_name: nb
+      x:
+        dtype: f8
+        dimensions:
+        - nt
+        required: true
+        attrs:
+          long_name: x
+      Y:
+        dtype: f8
+        dimensions:
+        - nt
+        required: true
+        attrs:
+          long_name: Y
+      v:
+        dtype: f8
+        dimensions:
+        - nt
+        required: true
+        attrs:
+          long_name: v
+      Q:
+        dtype: f8
+        dimensions:
+        - nt
+        required: true
+        attrs:
+          long_name: Q
+      Q_constrained:
+        dtype: f8
+        dimensions:
+        - nt
+        required: true
+        attrs:
+          long_name: Q_constrained
+      gage_constrained:
+        dtype: f8
+        dimensions: []
+        required: true
+        attrs:
+          long_name: gage_constrained
+      input_Qm_prior:
+        dtype: f8
+        dimensions: []
+        required: true
+        attrs:
+          long_name: input_Qm_prior
+      input_Qb_prior:
+        dtype: f8
+        dimensions: []
+        required: true
+        attrs:
+          long_name: input_Qb_prior
+      input_Yb_prior:
+        dtype: f8
+        dimensions: []
+        required: true
+        attrs:
+          long_name: input_Yb_prior
+      input_known_ezf:
+        dtype: f8
+        dimensions: []
+        required: true
+        attrs:
+          long_name: input_known_ezf
+      input_known_bkfl_stage:
+        dtype: f8
+        dimensions: []
+        required: true
+        attrs:
+          long_name: input_known_bkfl_stage
+      input_known_nb_seg1:
+        dtype: f8
+        dimensions: []
+        required: true
+        attrs:
+          long_name: input_known_nb_seg1
+      input_known_x_seg1:
+        dtype: f8
+        dimensions: []
+        required: true
+        attrs:
+          long_name: input_known_x_seg1
+      Qgage_constrained_nb_seg1:
+        dtype: f8
+        dimensions: []
+        required: true
+        attrs:
+          long_name: Qgage_constrained_nb_seg1
+      Qgage_constrained_x_seg1:
+        dtype: f8
+        dimensions: []
+        required: true
+        attrs:
+          long_name: Qgage_constrained_x_seg1
+      input_known_nb_seg2:
+        dtype: f8
+        dimensions: []
+        required: true
+        attrs:
+          long_name: input_known_nb_seg2
+      input_known_x_seg2:
+        dtype: f8
+        dimensions: []
+        required: true
+        attrs:
+          long_name: input_known_x_seg2
+      Qgage_constrained_nb_seg2:
+        dtype: f8
+        dimensions: []
+        required: true
+        attrs:
+          long_name: Qgage_constrained_nb_seg2
+      Qgage_constrained_x_seg2:
+        dtype: f8
+        dimensions: []
+        required: true
+        attrs:
+          long_name: Qgage_constrained_x_seg2
+      n_bkfl_Qb_prior:
+        dtype: f8
+        dimensions: []
+        required: true
+        attrs:
+          long_name: n_bkfl_Qb_prior
+      n_bkfl_slope:
+        dtype: f8
+        dimensions: []
+        required: true
+        attrs:
+          long_name: n_bkfl_slope
+      vel_bkfl_Qb_prior:
+        dtype: f8
+        dimensions: []
+        required: true
+        attrs:
+          long_name: vel_bkfl_Qb_prior
+      Froude_bkfl_diag_Smean:
+        dtype: f8
+        dimensions: []
+        required: true
+        attrs:
+          long_name: Froude_bkfl_diag_Smean
+      width_bkfl_solved_obs:
+        dtype: f8
+        dimensions: []
+        required: true
+        attrs:
+          long_name: width_bkfl_solved_obs
+      depth_bkfl_solved_obs:
+        dtype: f8
+        dimensions: []
+        required: true
+        attrs:
+          long_name: depth_bkfl_solved_obs
+      depth_bkfl_diag_Wb_Smean:
+        dtype: f8
+        dimensions: []
+        required: true
+        attrs:
+          long_name: depth_bkfl_diag_Wb_Smean
+      zero_flow_stage:
+        dtype: f8
+        dimensions: []
+        required: true
+        attrs:
+          long_name: zero_flow_stage
+      bankfull_stage:
+        dtype: f8
+        dimensions: []
+        required: true
+        attrs:
+          long_name: bankfull_stage
+      Qmean_prior:
+        dtype: f8
+        dimensions: []
+        required: true
+        attrs:
+          long_name: Qmean_prior
+      Qmean_momma:
+        dtype: f8
+        dimensions: []
+        required: true
+        attrs:
+          long_name: Qmean_momma
+      Qmean_momma.constrained:
+        dtype: f8
+        dimensions: []
+        required: true
+        attrs:
+          long_name: Qmean_momma.constrained
+      width_stage_corr:
+        dtype: f8
+        dimensions: []
+        required: true
+        attrs:
+          long_name: width_stage_corr
+  consumes: []

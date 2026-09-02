@@ -63,10 +63,10 @@ class VariableAttrs(_Base):
 
     long_name: str
     comment: str | None = None
-    units: str
+    units: str | None = None
     valid_min: float | None = None
     valid_max: float | None = None
-    coverage_content_type: CoverageContentType
+    coverage_content_type: CoverageContentType | None = None
 
     @model_validator(mode="after")
     def _check_bounds(self) -> VariableAttrs:

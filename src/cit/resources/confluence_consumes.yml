@@ -1,0 +1,2009 @@
+# Module interdependencies for every module in the Confluence Step Function.
+# modules.<name>.consumes[] entries are cit.contract.Consumes {filepath, variables}.
+# external_sources are pipeline roots no module produces -- documented here, excluded from consumes.
+# external_sources[].cross_check: 'producer' = treat as a producing contract with the listed variables;
+#   'ignore' = no sample file available; skip (do not fail) any consumes entry pointing at this filepath.
+generated: '2026-09-02'
+external_sources:
+- filepath: podaac/SWOT_L2_HR_RiverSP_D/{granule}.zip
+  cross_check: ignore
+  consumed_by:
+  - input
+  why: SWOT L2 river single-pass product from PO.DAAC; the pipeline root.
+  sample: null
+  variables: []
+- filepath: input/sword/{continent}_sword_v{number}.nc
+  cross_check: producer
+  consumed_by:
+  - setfinder
+  - input
+  - priors
+  - moi
+  - coastalq
+  - offline
+  - ssc_input
+  - ssc_model_deployment
+  - metroman
+  - hivdi
+  - momma
+  - sic4dvar
+  - sad
+  - neobam
+  - busboi
+  why: SWORD river database, maintained outside Confluence (edited via sword-patch). Staged into input/sword/ by
+    `input`, not produced.
+  sample: input/sword/na_sword_v17.nc
+  variables:
+  - centerlines/cl_id
+  - centerlines/x
+  - centerlines/y
+  - centerlines/reach_id
+  - centerlines/node_id
+  - nodes/node_id
+  - nodes/cl_ids
+  - nodes/x
+  - nodes/y
+  - nodes/node_length
+  - nodes/reach_id
+  - nodes/wse
+  - nodes/wse_var
+  - nodes/width
+  - nodes/width_var
+  - nodes/n_chan_max
+  - nodes/n_chan_mod
+  - nodes/obstr_type
+  - nodes/grod_id
+  - nodes/hfalls_id
+  - nodes/dist_out
+  - nodes/wth_coef
+  - nodes/ext_dist_coef
+  - nodes/facc
+  - nodes/lakeflag
+  - nodes/max_width
+  - nodes/meander_length
+  - nodes/sinuosity
+  - nodes/manual_add
+  - nodes/river_name
+  - nodes/edit_flag
+  - nodes/trib_flag
+  - nodes/path_freq
+  - nodes/path_order
+  - nodes/path_segs
+  - nodes/stream_order
+  - nodes/main_side
+  - nodes/end_reach
+  - nodes/network
+  - reaches/reach_id
+  - reaches/cl_ids
+  - reaches/x
+  - reaches/x_min
+  - reaches/x_max
+  - reaches/y
+  - reaches/y_min
+  - reaches/y_max
+  - reaches/reach_length
+  - reaches/n_nodes
+  - reaches/wse
+  - reaches/wse_var
+  - reaches/width
+  - reaches/width_var
+  - reaches/facc
+  - reaches/n_chan_max
+  - reaches/n_chan_mod
+  - reaches/obstr_type
+  - reaches/grod_id
+  - reaches/hfalls_id
+  - reaches/slope
+  - reaches/dist_out
+  - reaches/n_rch_up
+  - reaches/n_rch_down
+  - reaches/rch_id_up
+  - reaches/rch_id_dn
+  - reaches/lakeflag
+  - reaches/iceflag
+  - reaches/swot_obs
+  - reaches/swot_orbits
+  - reaches/river_name
+  - reaches/max_width
+  - reaches/low_slope_flag
+  - reaches/edit_flag
+  - reaches/trib_flag
+  - reaches/path_freq
+  - reaches/path_order
+  - reaches/path_segs
+  - reaches/stream_order
+  - reaches/main_side
+  - reaches/end_reach
+  - reaches/network
+  - reaches/area_fits/h_break
+  - reaches/area_fits/w_break
+  - reaches/area_fits/h_variance
+  - reaches/area_fits/w_variance
+  - reaches/area_fits/hw_covariance
+  - reaches/area_fits/h_err_stdev
+  - reaches/area_fits/w_err_stdev
+  - reaches/area_fits/h_w_nobs
+  - reaches/area_fits/fit_coeffs
+  - reaches/area_fits/med_flow_area
+  - reaches/discharge_models/unconstrained/MetroMan/Abar
+  - reaches/discharge_models/unconstrained/MetroMan/Abar_stdev
+  - reaches/discharge_models/unconstrained/MetroMan/ninf
+  - reaches/discharge_models/unconstrained/MetroMan/ninf_stdev
+  - reaches/discharge_models/unconstrained/MetroMan/p
+  - reaches/discharge_models/unconstrained/MetroMan/p_stdev
+  - reaches/discharge_models/unconstrained/MetroMan/ninf_p_cor
+  - reaches/discharge_models/unconstrained/MetroMan/p_Abar_cor
+  - reaches/discharge_models/unconstrained/MetroMan/ninf_Abar_cor
+  - reaches/discharge_models/unconstrained/MetroMan/sbQ_rel
+  - reaches/discharge_models/unconstrained/BAM/Abar
+  - reaches/discharge_models/unconstrained/BAM/n
+  - reaches/discharge_models/unconstrained/BAM/sbQ_rel
+  - reaches/discharge_models/unconstrained/HiVDI/Abar
+  - reaches/discharge_models/unconstrained/HiVDI/alpha
+  - reaches/discharge_models/unconstrained/HiVDI/beta
+  - reaches/discharge_models/unconstrained/HiVDI/sbQ_rel
+  - reaches/discharge_models/unconstrained/MOMMA/B
+  - reaches/discharge_models/unconstrained/MOMMA/H
+  - reaches/discharge_models/unconstrained/MOMMA/Save
+  - reaches/discharge_models/unconstrained/MOMMA/sbQ_rel
+  - reaches/discharge_models/unconstrained/SADS/Abar
+  - reaches/discharge_models/unconstrained/SADS/n
+  - reaches/discharge_models/unconstrained/SADS/sbQ_rel
+  - reaches/discharge_models/unconstrained/SIC4DVar/Abar
+  - reaches/discharge_models/unconstrained/SIC4DVar/n
+  - reaches/discharge_models/unconstrained/SIC4DVar/sbQ_rel
+  - reaches/discharge_models/constrained/MetroMan/Abar
+  - reaches/discharge_models/constrained/MetroMan/Abar_stdev
+  - reaches/discharge_models/constrained/MetroMan/ninf
+  - reaches/discharge_models/constrained/MetroMan/ninf_stdev
+  - reaches/discharge_models/constrained/MetroMan/p
+  - reaches/discharge_models/constrained/MetroMan/p_stdev
+  - reaches/discharge_models/constrained/MetroMan/ninf_p_cor
+  - reaches/discharge_models/constrained/MetroMan/p_Abar_cor
+  - reaches/discharge_models/constrained/MetroMan/ninf_Abar_cor
+  - reaches/discharge_models/constrained/MetroMan/sbQ_rel
+  - reaches/discharge_models/constrained/BAM/Abar
+  - reaches/discharge_models/constrained/BAM/n
+  - reaches/discharge_models/constrained/BAM/sbQ_rel
+  - reaches/discharge_models/constrained/HiVDI/Abar
+  - reaches/discharge_models/constrained/HiVDI/alpha
+  - reaches/discharge_models/constrained/HiVDI/beta
+  - reaches/discharge_models/constrained/HiVDI/sbQ_rel
+  - reaches/discharge_models/constrained/MOMMA/B
+  - reaches/discharge_models/constrained/MOMMA/H
+  - reaches/discharge_models/constrained/MOMMA/Save
+  - reaches/discharge_models/constrained/MOMMA/sbQ_rel
+  - reaches/discharge_models/constrained/SADS/Abar
+  - reaches/discharge_models/constrained/SADS/n
+  - reaches/discharge_models/constrained/SADS/sbQ_rel
+  - reaches/discharge_models/constrained/SIC4DVar/Abar
+  - reaches/discharge_models/constrained/SIC4DVar/n
+  - reaches/discharge_models/constrained/SIC4DVar/sbQ_rel
+- filepath: input/gage/{agency}2SWORDout.nc
+  cross_check: ignore
+  consumed_by:
+  - priors
+  why: USGS/GRDC/GRADES/WBM/Riggs gauge targets; hand-curated uploads.
+  sample: null
+  variables: []
+- filepath: input/svs/SVS_v{number}_0_1.nc
+  cross_check: producer
+  consumed_by:
+  - validation
+  why: SWOT Validation Set gauge time series.
+  sample: input/svs/SVS_v1_0_1.nc
+  variables:
+  - time
+  - station
+  - Q
+  - lat
+  - lon
+  - reach_id_v16
+  - reach_id_v17b
+  - date_ymd
+  - station_id
+  - source
+  - river_name_sword
+- filepath: input/lakeflow/**
+  cross_check: ignore
+  consumed_by:
+  - lakeflow_input
+  why: PLD/GEOGLOWS ancillary CSVs.
+  sample: null
+  variables: []
+- filepath: input/ssc/model_static_files/**
+  cross_check: ignore
+  consumed_by:
+  - ssc_model_deployment
+  why: Pre-trained SSC model weights.
+  sample: null
+  variables: []
+- filepath: hls/{granule}
+  cross_check: ignore
+  consumed_by:
+  - ssc_model_deployment
+  why: Harmonized Landsat-Sentinel imagery.
+  sample: null
+  variables: []
+modules:
+  init_workflow:
+    stage: 0
+    sfn_state: Init Workflow Global | Init Workflow Reach Subset
+    produces_filepaths: []
+    consumes: []
+  setfinder:
+    stage: 1
+    sfn_state: Setfinder Global | Setfinder Reach Subset | Setfinder Subset Not Expanded
+    produces_filepaths:
+    - input/metrosets_{continent}.json
+    - input/hivdisets_{continent}.json
+    - input/sicsets_{continent}.json
+    - input/neosets_{continent}.json
+    - input/expanded_metrosets_{continent}.json
+    - input/expanded_hivdisets_{continent}.json
+    - input/expanded_sicsets_{continent}.json
+    - input/expanded_neosets_{continent}.json
+    consumes:
+    - filepath: input/continent-setfinder.json
+      variables: []
+  combine_data:
+    stage: 2
+    sfn_state: Combine Data Global | Combine Data Reach Subset
+    produces_filepaths:
+    - input/reaches.json
+    - input/basin.json
+    - input/metrosets.json
+    - input/hivdisets.json
+    - input/sicsets.json
+    - input/neosets.json
+    - input/expanded_reaches_of_interest.json
+    - input/expanded_{algorithm}sets.json
+    consumes:
+    - filepath: input/continent.json
+      variables: []
+    - filepath: input/{algorithm}sets_{continent}.json
+      variables: []
+    - filepath: input/reaches_of_interest.json
+      variables: []
+  input:
+    stage: 3
+    sfn_state: Input Global | Input Reach Subset
+    produces_filepaths:
+    - input/swot/{reach_id}_SWOT.nc
+    consumes:
+    - filepath: input/reaches.json
+      variables: []
+  prediagnostics:
+    stage: 4
+    sfn_state: Prediagnostics
+    notes: Whether downstream FLPE modules read the *_prediagnostics.nc flags, or prediagnostics edits the SWOT
+      files in place, is NOT determinable from the mount. Left un-asserted below.
+    produces_filepaths:
+    - diagnostics/prediagnostics/{reach_id}_prediagnostics.nc
+    consumes:
+    - filepath: input/reaches.json
+      variables: []
+    - filepath: input/swot/{reach_id}_SWOT.nc
+      variables:
+      - node/d_x_area
+      - node/dark_frac
+      - node/ice_clim_f
+      - node/node_id
+      - node/node_q_b
+      - node/p_width
+      - node/reach_id
+      - node/slope
+      - node/slope2
+      - node/time
+      - node/width
+      - node/wse
+      - node/xovr_cal_q
+      - node/xtrk_dist
+      - reach/d_x_area
+      - reach/dark_frac
+      - reach/ice_clim_f
+      - reach/p_length
+      - reach/p_width
+      - reach/reach_id
+      - reach/reach_q_b
+      - reach/slope
+      - reach/slope2
+      - reach/slope_r_u
+      - reach/time
+      - reach/width
+      - reach/wse
+      - reach/wse_r_u
+      - reach/xovr_cal_q
+      - reach/xtrk_dist
+  priors:
+    stage: 5
+    sfn_state: Priors | Priors GBPriors
+    produces_filepaths:
+    - input/sos/{continent}_sword_v{number}_SOS_priors.nc
+    consumes:
+    - filepath: input/swot/{reach_id}_SWOT.nc
+      variables:
+      - reach/d_x_area
+      - reach/reach_id
+      - reach/slope2
+      - reach/time
+      - reach/width
+      - reach/wse
+  metroman:
+    stage: 6
+    sfn_state: Metroman
+    produces_filepaths:
+    - flpe/metroman/sets/{set_id}_metroman.nc
+    consumes:
+    - filepath: input/metrosets.json
+      variables: []
+    - filepath: input/swot/{reach_id}_SWOT.nc
+      variables:
+      - node/d_x_area
+      - node/dark_frac
+      - node/ice_clim_f
+      - node/node_id
+      - node/node_q
+      - node/node_q_b
+      - node/reach_id
+      - node/slope2
+      - node/time
+      - node/width
+      - node/wse
+      - reach/d_x_area
+      - reach/dark_frac
+      - reach/ice_clim_f
+      - reach/n_good_nod
+      - reach/obs_frac_n
+      - reach/partial_f
+      - reach/reach_id
+      - reach/reach_q
+      - reach/reach_q_b
+      - reach/slope2
+      - reach/time
+      - reach/time_str
+      - reach/width
+      - reach/wse
+      - reach/xovr_cal_q
+    - filepath: input/sos/{continent}_sword_v{number}_SOS_priors.nc
+      variables:
+      - model/area_estimate_flag
+      - model/bad_prior_source
+      - model/bad_priors
+      - model/comid
+      - model/flow_duration_q
+      - model/max_q
+      - model/mean_q
+      - model/min_q
+      - model/monthly_q
+      - model/num_months
+      - model/overwritten_indexes
+      - model/overwritten_source
+      - model/probability
+      - model/two_year_return_q
+      - nodes/reach_id
+      - reaches/reach_id
+      - reaches/x
+      - reaches/y
+  metroman_consolidation:
+    stage: 7
+    sfn_state: Metroman Consolidation
+    produces_filepaths:
+    - flpe/metroman/{reach_id}_metroman.nc
+    consumes:
+    - filepath: input/metrosets.json
+      variables: []
+    - filepath: flpe/metroman/sets/{set_id}_metroman.nc
+      variables:
+      - A0hat
+      - allq
+      - nahat
+      - nr
+      - nt
+      - q_u
+      - reach_id
+      - t
+      - x1hat
+  hivdi:
+    stage: 6
+    sfn_state: hivdi
+    produces_filepaths:
+    - flpe/hivdi/{reach_id}_hivdi.nc
+    consumes:
+    - filepath: input/reaches.json
+      variables: []
+    - filepath: input/swot/{reach_id}_SWOT.nc
+      variables:
+      - node/d_x_area
+      - node/dark_frac
+      - node/ice_clim_f
+      - node/node_id
+      - node/node_q
+      - node/node_q_b
+      - node/reach_id
+      - node/slope2
+      - node/time
+      - node/width
+      - node/wse
+      - reach/d_x_area
+      - reach/dark_frac
+      - reach/ice_clim_f
+      - reach/n_good_nod
+      - reach/obs_frac_n
+      - reach/partial_f
+      - reach/reach_id
+      - reach/reach_q
+      - reach/reach_q_b
+      - reach/slope2
+      - reach/time
+      - reach/time_str
+      - reach/width
+      - reach/wse
+      - reach/xovr_cal_q
+    - filepath: input/sos/{continent}_sword_v{number}_SOS_priors.nc
+      variables:
+      - model/area_estimate_flag
+      - model/bad_prior_source
+      - model/bad_priors
+      - model/comid
+      - model/flow_duration_q
+      - model/max_q
+      - model/mean_q
+      - model/min_q
+      - model/monthly_q
+      - model/num_months
+      - model/overwritten_indexes
+      - model/overwritten_source
+      - model/probability
+      - model/two_year_return_q
+      - nodes/reach_id
+      - reaches/reach_id
+      - reaches/x
+      - reaches/y
+  momma:
+    stage: 6
+    sfn_state: Momma Constrained | Momma Unconstrained
+    produces_filepaths:
+    - flpe/momma/{reach_id}_momma.nc
+    consumes:
+    - filepath: input/reaches.json
+      variables: []
+    - filepath: input/swot/{reach_id}_SWOT.nc
+      variables:
+      - node/d_x_area
+      - node/dark_frac
+      - node/ice_clim_f
+      - node/node_id
+      - node/node_q
+      - node/node_q_b
+      - node/reach_id
+      - node/slope2
+      - node/time
+      - node/width
+      - node/wse
+      - reach/d_x_area
+      - reach/dark_frac
+      - reach/ice_clim_f
+      - reach/n_good_nod
+      - reach/obs_frac_n
+      - reach/partial_f
+      - reach/reach_id
+      - reach/reach_q
+      - reach/reach_q_b
+      - reach/slope
+      - reach/slope2
+      - reach/slope2_u
+      - reach/time
+      - reach/time_str
+      - reach/width
+      - reach/width_u
+      - reach/wse
+      - reach/wse_u
+      - reach/xovr_cal_q
+    - filepath: input/sos/{continent}_sword_v{number}_SOS_priors.nc
+      variables:
+      - MEFCCWP/CAL
+      - MEFCCWP/MEFCCWP_flow_duration_q
+      - MEFCCWP/MEFCCWP_id
+      - MEFCCWP/MEFCCWP_max_q
+      - MEFCCWP/MEFCCWP_mean_q
+      - MEFCCWP/MEFCCWP_min_q
+      - MEFCCWP/MEFCCWP_monthly_q
+      - MEFCCWP/MEFCCWP_q
+      - MEFCCWP/MEFCCWP_qt
+      - MEFCCWP/MEFCCWP_reach_id
+      - MEFCCWP/MEFCCWP_reaches
+      - MEFCCWP/MEFCCWP_two_year_return_q
+      - MEFCCWP/num_days
+      - SWOT_SHAQ/CAL
+      - SWOT_SHAQ/SWOT_SHAQ_flow_duration_q
+      - SWOT_SHAQ/SWOT_SHAQ_id
+      - SWOT_SHAQ/SWOT_SHAQ_max_q
+      - SWOT_SHAQ/SWOT_SHAQ_mean_q
+      - SWOT_SHAQ/SWOT_SHAQ_min_q
+      - SWOT_SHAQ/SWOT_SHAQ_monthly_q
+      - SWOT_SHAQ/SWOT_SHAQ_q
+      - SWOT_SHAQ/SWOT_SHAQ_qt
+      - SWOT_SHAQ/SWOT_SHAQ_reach_id
+      - SWOT_SHAQ/SWOT_SHAQ_reaches
+      - SWOT_SHAQ/SWOT_SHAQ_two_year_return_q
+      - SWOT_SHAQ/num_days
+      - USGS/CAL
+      - USGS/USGS_flow_duration_q
+      - USGS/USGS_id
+      - USGS/USGS_max_q
+      - USGS/USGS_mean_q
+      - USGS/USGS_min_q
+      - USGS/USGS_monthly_q
+      - USGS/USGS_q
+      - USGS/USGS_qt
+      - USGS/USGS_reach_id
+      - USGS/USGS_reaches
+      - USGS/USGS_two_year_return_q
+      - USGS/num_days
+      - WSC/CAL
+      - WSC/WSC_flow_duration_q
+      - WSC/WSC_id
+      - WSC/WSC_max_q
+      - WSC/WSC_mean_q
+      - WSC/WSC_min_q
+      - WSC/WSC_monthly_q
+      - WSC/WSC_q
+      - WSC/WSC_qt
+      - WSC/WSC_reach_id
+      - WSC/WSC_reaches
+      - WSC/WSC_two_year_return_q
+      - WSC/num_days
+      - historicQ/MEFCCWP/MEFCCWP_flow_duration_q
+      - historicQ/MEFCCWP/MEFCCWP_id
+      - historicQ/MEFCCWP/MEFCCWP_max_q
+      - historicQ/MEFCCWP/MEFCCWP_mean_q
+      - historicQ/MEFCCWP/MEFCCWP_min_q
+      - historicQ/MEFCCWP/MEFCCWP_monthly_q
+      - historicQ/MEFCCWP/MEFCCWP_q
+      - historicQ/MEFCCWP/MEFCCWP_qt
+      - historicQ/MEFCCWP/MEFCCWP_reach_id
+      - historicQ/MEFCCWP/MEFCCWP_reaches
+      - historicQ/MEFCCWP/MEFCCWP_two_year_return_q
+      - historicQ/MEFCCWP/num_days
+      - historicQ/SWOT_SHAQ/SWOT_SHAQ_flow_duration_q
+      - historicQ/SWOT_SHAQ/SWOT_SHAQ_id
+      - historicQ/SWOT_SHAQ/SWOT_SHAQ_max_q
+      - historicQ/SWOT_SHAQ/SWOT_SHAQ_mean_q
+      - historicQ/SWOT_SHAQ/SWOT_SHAQ_min_q
+      - historicQ/SWOT_SHAQ/SWOT_SHAQ_monthly_q
+      - historicQ/SWOT_SHAQ/SWOT_SHAQ_q
+      - historicQ/SWOT_SHAQ/SWOT_SHAQ_qt
+      - historicQ/SWOT_SHAQ/SWOT_SHAQ_reach_id
+      - historicQ/SWOT_SHAQ/SWOT_SHAQ_reaches
+      - historicQ/SWOT_SHAQ/SWOT_SHAQ_two_year_return_q
+      - historicQ/SWOT_SHAQ/num_days
+      - historicQ/USGS/USGS_flow_duration_q
+      - historicQ/USGS/USGS_id
+      - historicQ/USGS/USGS_max_q
+      - historicQ/USGS/USGS_mean_q
+      - historicQ/USGS/USGS_min_q
+      - historicQ/USGS/USGS_monthly_q
+      - historicQ/USGS/USGS_q
+      - historicQ/USGS/USGS_qt
+      - historicQ/USGS/USGS_reach_id
+      - historicQ/USGS/USGS_reaches
+      - historicQ/USGS/USGS_two_year_return_q
+      - historicQ/USGS/num_days
+      - historicQ/WSC/WSC_flow_duration_q
+      - historicQ/WSC/WSC_id
+      - historicQ/WSC/WSC_max_q
+      - historicQ/WSC/WSC_mean_q
+      - historicQ/WSC/WSC_min_q
+      - historicQ/WSC/WSC_monthly_q
+      - historicQ/WSC/WSC_q
+      - historicQ/WSC/WSC_qt
+      - historicQ/WSC/WSC_reach_id
+      - historicQ/WSC/WSC_reaches
+      - historicQ/WSC/WSC_two_year_return_q
+      - historicQ/WSC/num_days
+      - historicQ/grdc/grdc_flow_duration_q
+      - historicQ/grdc/grdc_id
+      - historicQ/grdc/grdc_max_q
+      - historicQ/grdc/grdc_mean_q
+      - historicQ/grdc/grdc_min_q
+      - historicQ/grdc/grdc_monthly_q
+      - historicQ/grdc/grdc_q
+      - historicQ/grdc/grdc_qt
+      - historicQ/grdc/grdc_reach_id
+      - historicQ/grdc/grdc_two_year_return_q
+      - historicQ/grdc/num_days
+      - historicQ/grdc/num_grdc_reaches
+      - model/area_estimate_flag
+      - model/bad_prior_source
+      - model/bad_priors
+      - model/comid
+      - model/flow_duration_q
+      - model/max_q
+      - model/mean_q
+      - model/min_q
+      - model/monthly_q
+      - model/num_months
+      - model/overwritten_indexes
+      - model/overwritten_source
+      - model/probability
+      - model/two_year_return_q
+      - nodes/reach_id
+      - reaches/reach_id
+      - reaches/x
+      - reaches/y
+  sic4dvar:
+    stage: 6
+    sfn_state: Sic4dvar
+    produces_filepaths:
+    - flpe/sic4dvar/{reach_id}_sic4dvar.nc
+    consumes:
+    - filepath: input/reaches.json
+      variables: []
+    - filepath: input/swot/{reach_id}_SWOT.nc
+      variables:
+      - node/d_x_area
+      - node/dark_frac
+      - node/ice_clim_f
+      - node/node_id
+      - node/node_q
+      - node/node_q_b
+      - node/reach_id
+      - node/slope2
+      - node/time
+      - node/width
+      - node/wse
+      - reach/d_x_area
+      - reach/dark_frac
+      - reach/hwfit/fit_coeffs
+      - reach/hwfit/h_break
+      - reach/hwfit/h_err_stdev
+      - reach/hwfit/h_variance
+      - reach/hwfit/h_w_nobs
+      - reach/hwfit/hw_covariance
+      - reach/hwfit/med_flow_area
+      - reach/hwfit/w_break
+      - reach/hwfit/w_err_stdev
+      - reach/hwfit/w_variance
+      - reach/ice_clim_f
+      - reach/n_good_nod
+      - reach/obs_frac_n
+      - reach/partial_f
+      - reach/reach_id
+      - reach/reach_q
+      - reach/reach_q_b
+      - reach/slope2
+      - reach/time
+      - reach/time_str
+      - reach/width
+      - reach/wse
+      - reach/xovr_cal_q
+    - filepath: input/sos/{continent}_sword_v{number}_SOS_priors.nc
+      variables:
+      - model/area_estimate_flag
+      - model/bad_prior_source
+      - model/bad_priors
+      - model/comid
+      - model/flow_duration_q
+      - model/max_q
+      - model/mean_q
+      - model/min_q
+      - model/monthly_q
+      - model/num_months
+      - model/overwritten_indexes
+      - model/overwritten_source
+      - model/probability
+      - model/two_year_return_q
+      - nodes/reach_id
+      - reaches/reach_id
+      - reaches/x
+      - reaches/y
+  sad:
+    stage: 6
+    sfn_state: (not in current ASL)
+    produces_filepaths:
+    - flpe/sad/{reach_id}_sad.nc
+    consumes:
+    - filepath: input/reaches.json
+      variables: []
+    - filepath: input/swot/{reach_id}_SWOT.nc
+      variables:
+      - node/d_x_area
+      - node/dark_frac
+      - node/ice_clim_f
+      - node/node_id
+      - node/node_q
+      - node/node_q_b
+      - node/reach_id
+      - node/slope2
+      - node/time
+      - node/width
+      - node/wse
+      - reach/d_x_area
+      - reach/dark_frac
+      - reach/ice_clim_f
+      - reach/n_good_nod
+      - reach/obs_frac_n
+      - reach/partial_f
+      - reach/reach_id
+      - reach/reach_q
+      - reach/reach_q_b
+      - reach/slope2
+      - reach/time
+      - reach/time_str
+      - reach/width
+      - reach/wse
+      - reach/xovr_cal_q
+    - filepath: input/sos/{continent}_sword_v{number}_SOS_priors.nc
+      variables:
+      - model/area_estimate_flag
+      - model/bad_prior_source
+      - model/bad_priors
+      - model/comid
+      - model/flow_duration_q
+      - model/max_q
+      - model/mean_q
+      - model/min_q
+      - model/monthly_q
+      - model/num_months
+      - model/overwritten_indexes
+      - model/overwritten_source
+      - model/probability
+      - model/two_year_return_q
+      - nodes/reach_id
+      - reaches/reach_id
+      - reaches/x
+      - reaches/y
+  neobam:
+    stage: 6
+    sfn_state: (not in current ASL)
+    notes: 'Naming drift: files say geobam, downstream groups say neobam. Contract name should be the one the module
+      emits today.'
+    produces_filepaths:
+    - flpe/geobam/{reach_id}_geobam.nc
+    consumes:
+    - filepath: input/reaches.json
+      variables: []
+    - filepath: input/swot/{reach_id}_SWOT.nc
+      variables:
+      - node/d_x_area
+      - node/dark_frac
+      - node/ice_clim_f
+      - node/node_id
+      - node/node_q
+      - node/node_q_b
+      - node/reach_id
+      - node/slope2
+      - node/time
+      - node/width
+      - node/wse
+      - reach/d_x_area
+      - reach/dark_frac
+      - reach/ice_clim_f
+      - reach/n_good_nod
+      - reach/obs_frac_n
+      - reach/partial_f
+      - reach/reach_id
+      - reach/reach_q
+      - reach/reach_q_b
+      - reach/slope2
+      - reach/time
+      - reach/time_str
+      - reach/width
+      - reach/wse
+      - reach/xovr_cal_q
+    - filepath: input/sos/{continent}_sword_v{number}_SOS_priors.nc
+      variables:
+      - gbpriors/node/Serr_sd
+      - gbpriors/node/Werr_sd
+      - gbpriors/node/b_hat
+      - gbpriors/node/b_sd
+      - gbpriors/node/dAerr_sd
+      - gbpriors/node/logA0_hat
+      - gbpriors/node/logA0_sd
+      - gbpriors/node/logDb_hat
+      - gbpriors/node/logDb_sd
+      - gbpriors/node/logQ_sd
+      - gbpriors/node/logQc_hat
+      - gbpriors/node/logQc_sd
+      - gbpriors/node/logWb_hat
+      - gbpriors/node/logWb_sd
+      - gbpriors/node/logWc_hat
+      - gbpriors/node/logWc_sd
+      - gbpriors/node/logn_hat
+      - gbpriors/node/logn_sd
+      - gbpriors/node/logr_hat
+      - gbpriors/node/logr_sd
+      - gbpriors/node/lowerbound_A0
+      - gbpriors/node/lowerbound_b
+      - gbpriors/node/lowerbound_logDb
+      - gbpriors/node/lowerbound_logQc
+      - gbpriors/node/lowerbound_logWb
+      - gbpriors/node/lowerbound_logWc
+      - gbpriors/node/lowerbound_logn
+      - gbpriors/node/lowerbound_logr
+      - gbpriors/node/overwritten_indexes
+      - gbpriors/node/river_type
+      - gbpriors/node/sigma_amhg
+      - gbpriors/node/sigma_man
+      - gbpriors/node/upperbound_A0
+      - gbpriors/node/upperbound_b
+      - gbpriors/node/upperbound_logDb
+      - gbpriors/node/upperbound_logQc
+      - gbpriors/node/upperbound_logWb
+      - gbpriors/node/upperbound_logWc
+      - gbpriors/node/upperbound_logn
+      - gbpriors/node/upperbound_logr
+      - gbpriors/reach/Serr_sd
+      - gbpriors/reach/Werr_sd
+      - gbpriors/reach/b_hat
+      - gbpriors/reach/b_sd
+      - gbpriors/reach/dAerr_sd
+      - gbpriors/reach/logA0_hat
+      - gbpriors/reach/logA0_sd
+      - gbpriors/reach/logDb_hat
+      - gbpriors/reach/logDb_sd
+      - gbpriors/reach/logQ_sd
+      - gbpriors/reach/logQc_hat
+      - gbpriors/reach/logQc_sd
+      - gbpriors/reach/logWb_hat
+      - gbpriors/reach/logWb_sd
+      - gbpriors/reach/logWc_hat
+      - gbpriors/reach/logWc_sd
+      - gbpriors/reach/logn_hat
+      - gbpriors/reach/logn_sd
+      - gbpriors/reach/logr_hat
+      - gbpriors/reach/logr_sd
+      - gbpriors/reach/lowerbound_A0
+      - gbpriors/reach/lowerbound_b
+      - gbpriors/reach/lowerbound_logDb
+      - gbpriors/reach/lowerbound_logQc
+      - gbpriors/reach/lowerbound_logWb
+      - gbpriors/reach/lowerbound_logWc
+      - gbpriors/reach/lowerbound_logn
+      - gbpriors/reach/lowerbound_logr
+      - gbpriors/reach/overwritten_indexes
+      - gbpriors/reach/river_type
+      - gbpriors/reach/sigma_amhg
+      - gbpriors/reach/sigma_man
+      - gbpriors/reach/upperbound_A0
+      - gbpriors/reach/upperbound_b
+      - gbpriors/reach/upperbound_logDb
+      - gbpriors/reach/upperbound_logQc
+      - gbpriors/reach/upperbound_logWb
+      - gbpriors/reach/upperbound_logWc
+      - gbpriors/reach/upperbound_logn
+      - gbpriors/reach/upperbound_logr
+      - model/area_estimate_flag
+      - model/bad_prior_source
+      - model/bad_priors
+      - model/comid
+      - model/flow_duration_q
+      - model/max_q
+      - model/mean_q
+      - model/min_q
+      - model/monthly_q
+      - model/num_months
+      - model/overwritten_indexes
+      - model/overwritten_source
+      - model/probability
+      - model/two_year_return_q
+      - nodes/reach_id
+      - reaches/reach_id
+      - reaches/x
+      - reaches/y
+  busboi:
+    stage: 6
+    sfn_state: Busboi
+    produces_filepaths:
+    - flpe/busboi/{reach_id}_busboi.nc
+    consumes:
+    - filepath: input/reaches.json
+      variables: []
+    - filepath: input/swot/{reach_id}_SWOT.nc
+      variables:
+      - node/d_x_area
+      - node/dark_frac
+      - node/ice_clim_f
+      - node/node_id
+      - node/node_q
+      - node/node_q_b
+      - node/reach_id
+      - node/slope2
+      - node/time
+      - node/width
+      - node/wse
+      - reach/d_x_area
+      - reach/dark_frac
+      - reach/ice_clim_f
+      - reach/n_good_nod
+      - reach/obs_frac_n
+      - reach/partial_f
+      - reach/reach_id
+      - reach/reach_q
+      - reach/reach_q_b
+      - reach/slope2
+      - reach/time
+      - reach/time_str
+      - reach/width
+      - reach/wse
+      - reach/xovr_cal_q
+    - filepath: input/sos/{continent}_sword_v{number}_SOS_priors.nc
+      variables:
+      - model/area_estimate_flag
+      - model/bad_prior_source
+      - model/bad_priors
+      - model/comid
+      - model/flow_duration_q
+      - model/max_q
+      - model/mean_q
+      - model/min_q
+      - model/monthly_q
+      - model/num_months
+      - model/overwritten_indexes
+      - model/overwritten_source
+      - model/probability
+      - model/two_year_return_q
+      - nodes/reach_id
+      - reaches/reach_id
+      - reaches/x
+      - reaches/y
+  lakeflow_input:
+    stage: 2
+    sfn_state: Lakeflow Input
+    produces_filepaths:
+    - input/lakeflow/viable/viable_locations.csv
+    consumes:
+    - filepath: input/reaches_of_interest.json
+      variables: []
+  lakeflow_deploy:
+    stage: 6
+    sfn_state: Lakeflow Deploy
+    produces_filepaths:
+    - flpe/lakeflow/{lake_id}_lakeflow.nc
+    consumes:
+    - filepath: input/lakeflow/viable/viable_locations.csv
+      variables: []
+    - filepath: input/sos/{continent}_sword_v{number}_SOS_priors.nc
+      variables:
+      - model/area_estimate_flag
+      - model/bad_prior_source
+      - model/bad_priors
+      - model/comid
+      - model/flow_duration_q
+      - model/max_q
+      - model/mean_q
+      - model/min_q
+      - model/monthly_q
+      - model/num_months
+      - model/overwritten_indexes
+      - model/overwritten_source
+      - model/probability
+      - model/two_year_return_q
+      - nodes/reach_id
+      - reaches/reach_id
+      - reaches/x
+      - reaches/y
+    - filepath: input/swot/{reach_id}_SWOT.nc
+      variables:
+      - node/d_x_area
+      - node/dark_frac
+      - node/ice_clim_f
+      - node/node_id
+      - node/node_q
+      - node/node_q_b
+      - node/reach_id
+      - node/slope2
+      - node/time
+      - node/width
+      - node/wse
+      - reach/d_x_area
+      - reach/dark_frac
+      - reach/ice_clim_f
+      - reach/n_good_nod
+      - reach/obs_frac_n
+      - reach/partial_f
+      - reach/reach_id
+      - reach/reach_q
+      - reach/reach_q_b
+      - reach/slope2
+      - reach/time
+      - reach/time_str
+      - reach/width
+      - reach/wse
+      - reach/xovr_cal_q
+  ssc_input:
+    stage: 2
+    sfn_state: SSC Input
+    produces_filepaths:
+    - input/ssc/ssc_hls_list.json
+    consumes:
+    - filepath: input/reaches.json
+      variables: []
+  ssc_model_deployment:
+    stage: 6
+    sfn_state: SSC Model Deployment
+    produces_filepaths:
+    - flpe/ssc/{reach_id}_ssc.nc
+    consumes:
+    - filepath: input/ssc/ssc_hls_list.json
+      variables: []
+  consensus:
+    stage: 8
+    sfn_state: Consensus
+    produces_filepaths:
+    - flpe/consensus/{reach_id}_consensus.nc
+    consumes:
+    - filepath: input/reaches.json
+      variables: []
+    - &id001
+      filepath: flpe/hivdi/{reach_id}_hivdi.nc
+      variables: []
+    - &id002
+      filepath: flpe/metroman/{reach_id}_metroman.nc
+      variables:
+      - average/A0hat
+      - average/allq
+      - average/nahat
+      - average/q_u
+      - average/x1hat
+      - time_str
+    - &id003
+      filepath: flpe/momma/{reach_id}_momma.nc
+      variables:
+      - Q
+      - Q_constrained
+      - Qmean_momma
+      - Qmean_momma.constrained
+      - slope
+      - stage
+      - time_str
+      - width
+    - &id004
+      filepath: flpe/sic4dvar/{reach_id}_sic4dvar.nc
+      variables:
+      - A0
+      - Q_da
+      - Q_mm
+      - n
+      - q_u
+    - &id005
+      filepath: flpe/sad/{reach_id}_sad.nc
+      variables:
+      - A0
+      - Q_u
+      - Qa
+      - n
+      - time_str
+    - &id006
+      filepath: flpe/geobam/{reach_id}_geobam.nc
+      variables:
+      - logn/mean
+      - logn/sd
+      - q/q
+      - q/q_sd
+      - r/mean
+      - r/sd
+      - time_str
+    - &id007
+      filepath: flpe/busboi/{reach_id}_busboi.nc
+      variables:
+      - prior_q/q
+      - q/q
+      - time
+    - filepath: input/swot/{reach_id}_SWOT.nc
+      variables:
+      - reach/reach_id
+      - reach/time
+      - reach/time_str
+  postdiagnostics_flpe:
+    stage: 8
+    sfn_state: Postdiagnostics FLPE
+    produces_filepaths:
+    - diagnostics/postdiagnostics/reach/{reach_id}_flpe_diag.nc
+    consumes:
+    - filepath: input/reaches.json
+      variables: []
+    - *id001
+    - *id002
+    - *id003
+    - *id004
+    - *id005
+    - *id006
+    - *id007
+    - filepath: input/sos/{continent}_sword_v{number}_SOS_priors.nc
+      variables:
+      - model/flow_duration_q
+      - model/max_q
+      - model/mean_q
+      - model/min_q
+      - model/monthly_q
+      - model/two_year_return_q
+  moi:
+    stage: 9
+    sfn_state: Moi
+    produces_filepaths:
+    - moi/{reach_id}_integrator.nc
+    consumes:
+    - filepath: input/basin.json
+      variables: []
+    - *id001
+    - *id002
+    - *id003
+    - *id004
+    - *id005
+    - *id006
+    - *id007
+    - filepath: input/swot/{reach_id}_SWOT.nc
+      variables:
+      - reach/d_x_area
+      - reach/reach_id
+      - reach/slope2
+      - reach/time
+      - reach/width
+      - reach/wse
+  postdiagnostics_moi:
+    stage: 10
+    sfn_state: Postdiagnostics MOI
+    produces_filepaths:
+    - diagnostics/postdiagnostics/basin/{reach_id}_moi_diag.nc
+    consumes:
+    - filepath: input/reaches.json
+      variables: []
+    - filepath: moi/{reach_id}_integrator.nc
+      variables:
+      - hivdi/Abar
+      - hivdi/alpha
+      - hivdi/beta
+      - hivdi/q
+      - hivdi/qbar_basinScale
+      - hivdi/qbar_reachScale
+      - hivdi/sbQ_rel
+      - metroman/Abar
+      - metroman/na
+      - metroman/q
+      - metroman/q33_basinScale
+      - metroman/qbar_basinScale
+      - metroman/qbar_reachScale
+      - metroman/sbQ_rel
+      - metroman/x1
+      - momma/B
+      - momma/H
+      - momma/Save
+      - momma/q
+      - momma/qbar_basinScale
+      - momma/qbar_reachScale
+      - momma/sbQ_rel
+      - neobam/a0
+      - neobam/n
+      - neobam/q
+      - neobam/qbar_basinScale
+      - neobam/qbar_reachScale
+      - neobam/sbQ_rel
+      - nt
+      - sad/a0
+      - sad/n
+      - sad/q
+      - sad/qbar_basinScale
+      - sad/qbar_reachScale
+      - sad/sbQ_rel
+      - sic4dvar/a0
+      - sic4dvar/n
+      - sic4dvar/q
+      - sic4dvar/qbar_basinScale
+      - sic4dvar/qbar_reachScale
+      - sic4dvar/sbQ_rel
+    - *id001
+    - *id002
+    - *id003
+    - *id004
+    - *id005
+    - *id006
+    - *id007
+  coastalq:
+    stage: 11
+    sfn_state: coastalq
+    produces_filepaths:
+    - flpe/coastalq/{reach_id}_coastalq.nc
+    consumes:
+    - filepath: input/reaches.json
+      variables: []
+    - filepath: moi/{reach_id}_integrator.nc
+      variables: []
+    - filepath: flpe/consensus/{reach_id}_consensus.nc
+      variables: []
+  offline:
+    stage: 12
+    sfn_state: Offline
+    produces_filepaths:
+    - offline/{reach_id}_offline.nc
+    consumes:
+    - filepath: input/reaches.json
+      variables: []
+    - filepath: moi/{reach_id}_integrator.nc
+      variables:
+      - hivdi/Abar
+      - hivdi/alpha
+      - hivdi/beta
+      - hivdi/q
+      - hivdi/qbar_basinScale
+      - hivdi/qbar_reachScale
+      - hivdi/sbQ_rel
+      - metroman/Abar
+      - metroman/na
+      - metroman/q
+      - metroman/q33_basinScale
+      - metroman/qbar_basinScale
+      - metroman/qbar_reachScale
+      - metroman/sbQ_rel
+      - metroman/x1
+      - momma/B
+      - momma/H
+      - momma/Save
+      - momma/q
+      - momma/qbar_basinScale
+      - momma/qbar_reachScale
+      - momma/sbQ_rel
+      - neobam/a0
+      - neobam/n
+      - neobam/q
+      - neobam/qbar_basinScale
+      - neobam/qbar_reachScale
+      - neobam/sbQ_rel
+      - nt
+      - sad/a0
+      - sad/n
+      - sad/q
+      - sad/qbar_basinScale
+      - sad/qbar_reachScale
+      - sad/sbQ_rel
+      - sic4dvar/a0
+      - sic4dvar/n
+      - sic4dvar/q
+      - sic4dvar/qbar_basinScale
+      - sic4dvar/qbar_reachScale
+      - sic4dvar/sbQ_rel
+    - filepath: input/swot/{reach_id}_SWOT.nc
+      variables:
+      - node/d_x_area
+      - node/dark_frac
+      - node/ice_clim_f
+      - node/node_id
+      - node/node_q
+      - node/node_q_b
+      - node/reach_id
+      - node/slope2
+      - node/time
+      - node/width
+      - node/wse
+      - reach/d_x_area
+      - reach/dark_frac
+      - reach/ice_clim_f
+      - reach/n_good_nod
+      - reach/obs_frac_n
+      - reach/partial_f
+      - reach/reach_id
+      - reach/reach_q
+      - reach/reach_q_b
+      - reach/slope2
+      - reach/time
+      - reach/time_str
+      - reach/width
+      - reach/wse
+      - reach/xovr_cal_q
+    - filepath: input/sos/{continent}_sword_v{number}_SOS_priors.nc
+      variables:
+      - model/area_estimate_flag
+      - model/bad_prior_source
+      - model/bad_priors
+      - model/comid
+      - model/flow_duration_q
+      - model/max_q
+      - model/mean_q
+      - model/min_q
+      - model/monthly_q
+      - model/num_months
+      - model/overwritten_indexes
+      - model/overwritten_source
+      - model/probability
+      - model/two_year_return_q
+      - nodes/reach_id
+      - reaches/reach_id
+      - reaches/x
+      - reaches/y
+    - *id001
+    - *id002
+    - *id003
+    - *id004
+    - *id005
+    - *id006
+    - *id007
+  validation:
+    stage: 13
+    sfn_state: Validation
+    produces_filepaths:
+    - validation/stats/{reach_id}_validation.nc
+    - validation/figs/{reach_id}_{algorithm}.jpg
+    consumes:
+    - filepath: input/reaches.json
+      variables: []
+    - filepath: moi/{reach_id}_integrator.nc
+      variables:
+      - hivdi/Abar
+      - hivdi/alpha
+      - hivdi/beta
+      - hivdi/q
+      - hivdi/qbar_basinScale
+      - hivdi/qbar_reachScale
+      - hivdi/sbQ_rel
+      - metroman/Abar
+      - metroman/na
+      - metroman/q
+      - metroman/q33_basinScale
+      - metroman/qbar_basinScale
+      - metroman/qbar_reachScale
+      - metroman/sbQ_rel
+      - metroman/x1
+      - momma/B
+      - momma/H
+      - momma/Save
+      - momma/q
+      - momma/qbar_basinScale
+      - momma/qbar_reachScale
+      - momma/sbQ_rel
+      - neobam/a0
+      - neobam/n
+      - neobam/q
+      - neobam/qbar_basinScale
+      - neobam/qbar_reachScale
+      - neobam/sbQ_rel
+      - nt
+      - sad/a0
+      - sad/n
+      - sad/q
+      - sad/qbar_basinScale
+      - sad/qbar_reachScale
+      - sad/sbQ_rel
+      - sic4dvar/a0
+      - sic4dvar/n
+      - sic4dvar/q
+      - sic4dvar/qbar_basinScale
+      - sic4dvar/qbar_reachScale
+      - sic4dvar/sbQ_rel
+    - filepath: offline/{reach_id}_offline.nc
+      variables:
+      - d_x_area
+      - d_x_area_u
+      - dschg_b
+      - dschg_b_q
+      - dschg_b_u
+      - dschg_bsf
+      - dschg_c
+      - dschg_c_q
+      - dschg_c_u
+      - dschg_csf
+      - dschg_gb
+      - dschg_gb_q
+      - dschg_gb_u
+      - dschg_gbsf
+      - dschg_gc
+      - dschg_gc_q
+      - dschg_gc_u
+      - dschg_gcsf
+      - dschg_gh
+      - dschg_gh_q
+      - dschg_gh_u
+      - dschg_ghsf
+      - dschg_gi
+      - dschg_gi_q
+      - dschg_gi_u
+      - dschg_gisf
+      - dschg_gm
+      - dschg_gm_q
+      - dschg_gm_u
+      - dschg_gmsf
+      - dschg_go
+      - dschg_go_q
+      - dschg_go_u
+      - dschg_gosf
+      - dschg_gq_b
+      - dschg_gs
+      - dschg_gs_q
+      - dschg_gs_u
+      - dschg_gssf
+      - dschg_h
+      - dschg_h_q
+      - dschg_h_u
+      - dschg_hsf
+      - dschg_i
+      - dschg_i_q
+      - dschg_i_u
+      - dschg_isf
+      - dschg_m
+      - dschg_m_q
+      - dschg_m_u
+      - dschg_msf
+      - dschg_o
+      - dschg_o_q
+      - dschg_o_u
+      - dschg_osf
+      - dschg_q_b
+      - dschg_s
+      - dschg_s_q
+      - dschg_s_u
+      - dschg_ssf
+      - nt
+    - filepath: flpe/consensus/{reach_id}_consensus.nc
+      variables:
+      - consensus_q
+      - time_str
+    - *id001
+    - *id002
+    - *id003
+    - *id004
+    - *id005
+    - *id006
+    - *id007
+    - filepath: input/sos/{continent}_sword_v{number}_SOS_priors.nc
+      variables:
+      - MEFCCWP/CAL
+      - MEFCCWP/MEFCCWP_flow_duration_q
+      - MEFCCWP/MEFCCWP_id
+      - MEFCCWP/MEFCCWP_max_q
+      - MEFCCWP/MEFCCWP_mean_q
+      - MEFCCWP/MEFCCWP_min_q
+      - MEFCCWP/MEFCCWP_monthly_q
+      - MEFCCWP/MEFCCWP_q
+      - MEFCCWP/MEFCCWP_qt
+      - MEFCCWP/MEFCCWP_reach_id
+      - MEFCCWP/MEFCCWP_reaches
+      - MEFCCWP/MEFCCWP_two_year_return_q
+      - MEFCCWP/num_days
+      - SWOT_SHAQ/CAL
+      - SWOT_SHAQ/SWOT_SHAQ_flow_duration_q
+      - SWOT_SHAQ/SWOT_SHAQ_id
+      - SWOT_SHAQ/SWOT_SHAQ_max_q
+      - SWOT_SHAQ/SWOT_SHAQ_mean_q
+      - SWOT_SHAQ/SWOT_SHAQ_min_q
+      - SWOT_SHAQ/SWOT_SHAQ_monthly_q
+      - SWOT_SHAQ/SWOT_SHAQ_q
+      - SWOT_SHAQ/SWOT_SHAQ_qt
+      - SWOT_SHAQ/SWOT_SHAQ_reach_id
+      - SWOT_SHAQ/SWOT_SHAQ_reaches
+      - SWOT_SHAQ/SWOT_SHAQ_two_year_return_q
+      - SWOT_SHAQ/num_days
+      - USGS/CAL
+      - USGS/USGS_flow_duration_q
+      - USGS/USGS_id
+      - USGS/USGS_max_q
+      - USGS/USGS_mean_q
+      - USGS/USGS_min_q
+      - USGS/USGS_monthly_q
+      - USGS/USGS_q
+      - USGS/USGS_qt
+      - USGS/USGS_reach_id
+      - USGS/USGS_reaches
+      - USGS/USGS_two_year_return_q
+      - USGS/num_days
+      - WSC/CAL
+      - WSC/WSC_flow_duration_q
+      - WSC/WSC_id
+      - WSC/WSC_max_q
+      - WSC/WSC_mean_q
+      - WSC/WSC_min_q
+      - WSC/WSC_monthly_q
+      - WSC/WSC_q
+      - WSC/WSC_qt
+      - WSC/WSC_reach_id
+      - WSC/WSC_reaches
+      - WSC/WSC_two_year_return_q
+      - WSC/num_days
+      - historicQ/MEFCCWP/MEFCCWP_flow_duration_q
+      - historicQ/MEFCCWP/MEFCCWP_id
+      - historicQ/MEFCCWP/MEFCCWP_max_q
+      - historicQ/MEFCCWP/MEFCCWP_mean_q
+      - historicQ/MEFCCWP/MEFCCWP_min_q
+      - historicQ/MEFCCWP/MEFCCWP_monthly_q
+      - historicQ/MEFCCWP/MEFCCWP_q
+      - historicQ/MEFCCWP/MEFCCWP_qt
+      - historicQ/MEFCCWP/MEFCCWP_reach_id
+      - historicQ/MEFCCWP/MEFCCWP_reaches
+      - historicQ/MEFCCWP/MEFCCWP_two_year_return_q
+      - historicQ/MEFCCWP/num_days
+      - historicQ/SWOT_SHAQ/SWOT_SHAQ_flow_duration_q
+      - historicQ/SWOT_SHAQ/SWOT_SHAQ_id
+      - historicQ/SWOT_SHAQ/SWOT_SHAQ_max_q
+      - historicQ/SWOT_SHAQ/SWOT_SHAQ_mean_q
+      - historicQ/SWOT_SHAQ/SWOT_SHAQ_min_q
+      - historicQ/SWOT_SHAQ/SWOT_SHAQ_monthly_q
+      - historicQ/SWOT_SHAQ/SWOT_SHAQ_q
+      - historicQ/SWOT_SHAQ/SWOT_SHAQ_qt
+      - historicQ/SWOT_SHAQ/SWOT_SHAQ_reach_id
+      - historicQ/SWOT_SHAQ/SWOT_SHAQ_reaches
+      - historicQ/SWOT_SHAQ/SWOT_SHAQ_two_year_return_q
+      - historicQ/SWOT_SHAQ/num_days
+      - historicQ/USGS/USGS_flow_duration_q
+      - historicQ/USGS/USGS_id
+      - historicQ/USGS/USGS_max_q
+      - historicQ/USGS/USGS_mean_q
+      - historicQ/USGS/USGS_min_q
+      - historicQ/USGS/USGS_monthly_q
+      - historicQ/USGS/USGS_q
+      - historicQ/USGS/USGS_qt
+      - historicQ/USGS/USGS_reach_id
+      - historicQ/USGS/USGS_reaches
+      - historicQ/USGS/USGS_two_year_return_q
+      - historicQ/USGS/num_days
+      - historicQ/WSC/WSC_flow_duration_q
+      - historicQ/WSC/WSC_id
+      - historicQ/WSC/WSC_max_q
+      - historicQ/WSC/WSC_mean_q
+      - historicQ/WSC/WSC_min_q
+      - historicQ/WSC/WSC_monthly_q
+      - historicQ/WSC/WSC_q
+      - historicQ/WSC/WSC_qt
+      - historicQ/WSC/WSC_reach_id
+      - historicQ/WSC/WSC_reaches
+      - historicQ/WSC/WSC_two_year_return_q
+      - historicQ/WSC/num_days
+      - historicQ/grdc/grdc_flow_duration_q
+      - historicQ/grdc/grdc_id
+      - historicQ/grdc/grdc_max_q
+      - historicQ/grdc/grdc_mean_q
+      - historicQ/grdc/grdc_min_q
+      - historicQ/grdc/grdc_monthly_q
+      - historicQ/grdc/grdc_q
+      - historicQ/grdc/grdc_qt
+      - historicQ/grdc/grdc_reach_id
+      - historicQ/grdc/grdc_two_year_return_q
+      - historicQ/grdc/num_days
+      - historicQ/grdc/num_grdc_reaches
+    - filepath: input/swot/{reach_id}_SWOT.nc
+      variables:
+      - reach/reach_id
+      - reach/time
+      - reach/time_str
+  output:
+    stage: 14
+    sfn_state: Output | SSC Output | Lakeflow Output | SSC Lakeflow Output
+    notes: ssc and lakeflow only in the SSC*/Lakeflow* variants. sad and neobam/geobam are NOT in any -m list of
+      the current ASL -> the current output does not publish them.
+    produces_filepaths:
+    - output/sos/{continent}_sword_v{number}_SOS_results.nc
+    consumes:
+    - filepath: input/continent.json
+      variables: []
+    - filepath: input/sos/{continent}_sword_v{number}_SOS_priors.nc
+      variables:
+      - DWA/CAL
+      - DWA/DWA_flow_duration_q
+      - DWA/DWA_id
+      - DWA/DWA_max_q
+      - DWA/DWA_mean_q
+      - DWA/DWA_min_q
+      - DWA/DWA_monthly_q
+      - DWA/DWA_q
+      - DWA/DWA_qt
+      - DWA/DWA_reach_id
+      - DWA/DWA_reaches
+      - DWA/DWA_two_year_return_q
+      - DWA/num_days
+      - gbpriors/node/Serr_sd
+      - gbpriors/node/Werr_sd
+      - gbpriors/node/b_hat
+      - gbpriors/node/b_sd
+      - gbpriors/node/dAerr_sd
+      - gbpriors/node/logA0_hat
+      - gbpriors/node/logA0_sd
+      - gbpriors/node/logDb_hat
+      - gbpriors/node/logDb_sd
+      - gbpriors/node/logQ_sd
+      - gbpriors/node/logQc_hat
+      - gbpriors/node/logQc_sd
+      - gbpriors/node/logWb_hat
+      - gbpriors/node/logWb_sd
+      - gbpriors/node/logWc_hat
+      - gbpriors/node/logWc_sd
+      - gbpriors/node/logn_hat
+      - gbpriors/node/logn_sd
+      - gbpriors/node/logr_hat
+      - gbpriors/node/logr_sd
+      - gbpriors/node/lowerbound_A0
+      - gbpriors/node/lowerbound_b
+      - gbpriors/node/lowerbound_logDb
+      - gbpriors/node/lowerbound_logQc
+      - gbpriors/node/lowerbound_logWb
+      - gbpriors/node/lowerbound_logWc
+      - gbpriors/node/lowerbound_logn
+      - gbpriors/node/lowerbound_logr
+      - gbpriors/node/overwritten_indexes
+      - gbpriors/node/river_type
+      - gbpriors/node/sigma_amhg
+      - gbpriors/node/sigma_man
+      - gbpriors/node/upperbound_A0
+      - gbpriors/node/upperbound_b
+      - gbpriors/node/upperbound_logDb
+      - gbpriors/node/upperbound_logQc
+      - gbpriors/node/upperbound_logWb
+      - gbpriors/node/upperbound_logWc
+      - gbpriors/node/upperbound_logn
+      - gbpriors/node/upperbound_logr
+      - gbpriors/reach/Serr_sd
+      - gbpriors/reach/Werr_sd
+      - gbpriors/reach/b_hat
+      - gbpriors/reach/b_sd
+      - gbpriors/reach/dAerr_sd
+      - gbpriors/reach/logA0_hat
+      - gbpriors/reach/logA0_sd
+      - gbpriors/reach/logDb_hat
+      - gbpriors/reach/logDb_sd
+      - gbpriors/reach/logQ_sd
+      - gbpriors/reach/logQc_hat
+      - gbpriors/reach/logQc_sd
+      - gbpriors/reach/logWb_hat
+      - gbpriors/reach/logWb_sd
+      - gbpriors/reach/logWc_hat
+      - gbpriors/reach/logWc_sd
+      - gbpriors/reach/logn_hat
+      - gbpriors/reach/logn_sd
+      - gbpriors/reach/logr_hat
+      - gbpriors/reach/logr_sd
+      - gbpriors/reach/lowerbound_A0
+      - gbpriors/reach/lowerbound_b
+      - gbpriors/reach/lowerbound_logDb
+      - gbpriors/reach/lowerbound_logQc
+      - gbpriors/reach/lowerbound_logWb
+      - gbpriors/reach/lowerbound_logWc
+      - gbpriors/reach/lowerbound_logn
+      - gbpriors/reach/lowerbound_logr
+      - gbpriors/reach/overwritten_indexes
+      - gbpriors/reach/river_type
+      - gbpriors/reach/sigma_amhg
+      - gbpriors/reach/sigma_man
+      - gbpriors/reach/upperbound_A0
+      - gbpriors/reach/upperbound_b
+      - gbpriors/reach/upperbound_logDb
+      - gbpriors/reach/upperbound_logQc
+      - gbpriors/reach/upperbound_logWb
+      - gbpriors/reach/upperbound_logWc
+      - gbpriors/reach/upperbound_logn
+      - gbpriors/reach/upperbound_logr
+      - historicQ/DWA/DWA_flow_duration_q
+      - historicQ/DWA/DWA_id
+      - historicQ/DWA/DWA_max_q
+      - historicQ/DWA/DWA_mean_q
+      - historicQ/DWA/DWA_min_q
+      - historicQ/DWA/DWA_monthly_q
+      - historicQ/DWA/DWA_q
+      - historicQ/DWA/DWA_qt
+      - historicQ/DWA/DWA_reach_id
+      - historicQ/DWA/DWA_reaches
+      - historicQ/DWA/DWA_two_year_return_q
+      - historicQ/DWA/num_days
+      - historicQ/grdc/grdc_flow_duration_q
+      - historicQ/grdc/grdc_id
+      - historicQ/grdc/grdc_max_q
+      - historicQ/grdc/grdc_mean_q
+      - historicQ/grdc/grdc_min_q
+      - historicQ/grdc/grdc_monthly_q
+      - historicQ/grdc/grdc_q
+      - historicQ/grdc/grdc_qt
+      - historicQ/grdc/grdc_reach_id
+      - historicQ/grdc/grdc_two_year_return_q
+      - historicQ/grdc/num_days
+      - historicQ/grdc/num_grdc_reaches
+      - model/area_estimate_flag
+      - model/bad_prior_source
+      - model/bad_priors
+      - model/comid
+      - model/flow_duration_q
+      - model/max_q
+      - model/mean_q
+      - model/min_q
+      - model/monthly_q
+      - model/num_months
+      - model/overwritten_indexes
+      - model/overwritten_source
+      - model/probability
+      - model/two_year_return_q
+      - nodes/node_id
+      - nodes/reach_id
+      - nodes/river_name
+      - nodes/x
+      - nodes/y
+      - reaches/reach_id
+      - reaches/river_name
+      - reaches/x
+      - reaches/y
+    - filepath: flpe/hivdi/{reach_id}_hivdi.nc
+      variables: []
+    - filepath: flpe/metroman/{reach_id}_metroman.nc
+      variables:
+      - 12590000211/A0hat
+      - 12590000211/allq
+      - 12590000211/nahat
+      - 12590000211/q_u
+      - 12590000211/x1hat
+      - average/A0hat
+      - average/allq
+      - average/nahat
+      - average/q_u
+      - average/x1hat
+      - nt
+      - time_str
+    - filepath: moi/{reach_id}_integrator.nc
+      variables:
+      - hivdi/Abar
+      - hivdi/alpha
+      - hivdi/beta
+      - hivdi/q
+      - hivdi/qbar_basinScale
+      - hivdi/qbar_reachScale
+      - hivdi/sbQ_rel
+      - metroman/Abar
+      - metroman/na
+      - metroman/q
+      - metroman/q33_basinScale
+      - metroman/qbar_basinScale
+      - metroman/qbar_reachScale
+      - metroman/sbQ_rel
+      - metroman/x1
+      - momma/B
+      - momma/H
+      - momma/Save
+      - momma/q
+      - momma/qbar_basinScale
+      - momma/qbar_reachScale
+      - momma/sbQ_rel
+      - neobam/a0
+      - neobam/n
+      - neobam/q
+      - neobam/qbar_basinScale
+      - neobam/qbar_reachScale
+      - neobam/sbQ_rel
+      - nt
+      - sad/a0
+      - sad/n
+      - sad/q
+      - sad/qbar_basinScale
+      - sad/qbar_reachScale
+      - sad/sbQ_rel
+      - sic4dvar/a0
+      - sic4dvar/n
+      - sic4dvar/q
+      - sic4dvar/qbar_basinScale
+      - sic4dvar/qbar_reachScale
+      - sic4dvar/sbQ_rel
+    - filepath: flpe/momma/{reach_id}_momma.nc
+      variables:
+      - Froude_bkfl_diag_Smean
+      - Q
+      - Q_constrained
+      - Qgage
+      - Qgage_constrained_nb_seg1
+      - Qgage_constrained_nb_seg2
+      - Qgage_constrained_x_seg1
+      - Qgage_constrained_x_seg2
+      - Qmean_momma
+      - Qmean_momma.constrained
+      - Qmean_prior
+      - Y
+      - bankfull_stage
+      - depth_bkfl_diag_Wb_Smean
+      - depth_bkfl_solved_obs
+      - gage_constrained
+      - input_Qb_prior
+      - input_Qm_prior
+      - input_Yb_prior
+      - input_known_bkfl_stage
+      - input_known_ezf
+      - input_known_nb_seg1
+      - input_known_nb_seg2
+      - input_known_x_seg1
+      - input_known_x_seg2
+      - n
+      - n_bkfl_Qb_prior
+      - n_bkfl_slope
+      - nb
+      - nt
+      - seg
+      - slope
+      - stage
+      - time_str
+      - v
+      - vel_bkfl_Qb_prior
+      - width
+      - width_bkfl_solved_obs
+      - width_stage_corr
+      - x
+      - zero_flow_stage
+    - filepath: flpe/busboi/{reach_id}_busboi.nc
+      variables:
+      - bed/chainage
+      - bed/elevation
+      - nt
+      - nx
+      - prior_q/q
+      - q/q
+      - r/db
+      - r/mean
+      - r/wb
+      - time
+    - filepath: diagnostics/prediagnostics/{reach_id}_prediagnostics.nc
+      variables:
+      - node/d_x_area_flag
+      - node/dark_frac
+      - node/ice_clim_f
+      - node/low_slope_flag
+      - node/node_q_b
+      - node/prior_width_flag
+      - node/slope2_outliers
+      - node/slope_outliers
+      - node/width_outliers
+      - node/wse_outliers
+      - node/x_trk_dist_flag
+      - node/xovr_cal_q
+      - num_nodes
+      - reach/d_x_area_flag
+      - reach/dark_frac
+      - reach/ice_clim_f
+      - reach/low_slope_flag
+      - reach/prior_width_flag
+      - reach/reach_length_flag
+      - reach/reach_q_b
+      - reach/slope2_outliers
+      - reach/slope_outliers
+      - reach/slope_r_u_flag
+      - reach/width_outliers
+      - reach/wse_outliers
+      - reach/wse_r_u_flag
+      - reach/x_trk_dist_flag
+      - reach/xovr_cal_q
+      - time_steps
+    - filepath: flpe/sic4dvar/{reach_id}_sic4dvar.nc
+      variables:
+      - A0
+      - K
+      - Q_da
+      - Q_mm
+      - bb
+      - dry_area
+      - elevation
+      - hydraulic_radius
+      - n
+      - nt
+      - nx
+      - q_u
+      - reach_elevation
+      - reach_width
+      - times
+      - wet_area
+      - width
+      - width_min
+      - z_bed
+    - filepath: input/swot/{reach_id}_SWOT.nc
+      variables:
+      - node/d_x_area
+      - node/d_x_area_u
+      - node/dark_frac
+      - node/ice_clim_f
+      - node/ice_dyn_f
+      - node/n_good_pix
+      - node/node_id
+      - node/node_q
+      - node/node_q_b
+      - node/p_width
+      - node/reach_id
+      - node/slope
+      - node/slope2
+      - node/slope2_r_u
+      - node/slope2_u
+      - node/slope_r_u
+      - node/slope_u
+      - node/time
+      - node/time_str
+      - node/width
+      - node/width_u
+      - node/wse
+      - node/wse_r_u
+      - node/wse_u
+      - node/xovr_cal_q
+      - node/xtrk_dist
+      - nt
+      - nx
+      - observations
+      - reach/d_x_area
+      - reach/d_x_area_u
+      - reach/dark_frac
+      - reach/hwfit/fit_coeffs
+      - reach/hwfit/h_break
+      - reach/hwfit/h_err_stdev
+      - reach/hwfit/h_variance
+      - reach/hwfit/h_w_nobs
+      - reach/hwfit/hw_covariance
+      - reach/hwfit/med_flow_area
+      - reach/hwfit/w_break
+      - reach/hwfit/w_err_stdev
+      - reach/hwfit/w_variance
+      - reach/ice_clim_f
+      - reach/ice_dyn_f
+      - reach/n_good_nod
+      - reach/obs_frac_n
+      - reach/p_length
+      - reach/p_width
+      - reach/partial_f
+      - reach/reach_id
+      - reach/reach_q
+      - reach/reach_q_b
+      - reach/slope
+      - reach/slope2
+      - reach/slope2_r_u
+      - reach/slope2_u
+      - reach/slope_r_u
+      - reach/slope_u
+      - reach/time
+      - reach/time_str
+      - reach/width
+      - reach/width_u
+      - reach/wse
+      - reach/wse_r_u
+      - reach/wse_u
+      - reach/xovr_cal_q
+      - reach/xtrk_dist
+    - filepath: flpe/coastalq/{reach_id}_coastalq.nc
+      variables: []
+    - filepath: validation/stats/{reach_id}_validation.nc
+      variables:
+      - KGE_flpe
+      - KGE_moi
+      - KGE_o
+      - NSE_flpe
+      - NSE_moi
+      - NSE_o
+      - RMSE_flpe
+      - RMSE_moi
+      - RMSE_o
+      - Rsq_flpe
+      - Rsq_moi
+      - Rsq_o
+      - SIGe_flpe
+      - SIGe_moi
+      - SIGe_o
+      - algorithm_flpe
+      - algorithm_moi
+      - algorithm_o
+      - consensus_flpe
+      - gageID_flpe
+      - gageID_moi
+      - gageID_o
+      - nBIAS_flpe
+      - nBIAS_moi
+      - nBIAS_o
+      - nRMSE_flpe
+      - nRMSE_moi
+      - nRMSE_o
+      - pearsonr_flpe
+      - pearsonr_moi
+      - pearsonr_o
+      - testn_flpe
+      - testn_moi
+      - testn_o
+      - time
+    - filepath: flpe/consensus/{reach_id}_consensus.nc
+      variables:
+      - consensus_q
+      - time_str
+    - filepath: flpe/ssc/{reach_id}_ssc.nc
+      variables: []
+    - filepath: flpe/lakeflow/{lake_id}_lakeflow.nc
+      variables: []
+  report:
+    stage: 15
+    sfn_state: Report | Report Fail
+    produces_filepaths: []
+    consumes: []
+  clean_up:
+    stage: 16
+    sfn_state: Clean Up | Clean Up Fail
+    produces_filepaths: []
+    consumes: []

@@ -1,0 +1,94 @@
+version: 5.0.0
+source:
+  repo: metroman
+  github_username: SWOT-Confluence
+  branch: main
+  commit: 69e8a96e01c3e4064c8c0c6a828afc6fcb5c1406
+  image_tag: metroman:latest
+module:
+  name: metroman
+  produces:
+  - filepath: flpe/metroman/{reach_id}_metroman.nc
+    dimensions:
+    - nt
+    variables:
+      nt:
+        dtype: f8
+        dimensions:
+        - nt
+        required: true
+        attrs:
+          long_name: swot timeseries "time" variable converted to hours and rounded
+            to integer
+      time_str:
+        dtype: str
+        dimensions:
+        - nt
+        required: true
+        attrs:
+          long_name: swot timeseries "time" variable.
+      average/allq:
+        dtype: f8
+        dimensions:
+        - nt
+        required: true
+        attrs:
+          long_name: average/allq
+      average/A0hat:
+        dtype: f8
+        dimensions: []
+        required: true
+        attrs:
+          long_name: average/A0hat
+      average/nahat:
+        dtype: f8
+        dimensions: []
+        required: true
+        attrs:
+          long_name: average/nahat
+      average/x1hat:
+        dtype: f8
+        dimensions: []
+        required: true
+        attrs:
+          long_name: average/x1hat
+      average/q_u:
+        dtype: f8
+        dimensions:
+        - nt
+        required: true
+        attrs:
+          long_name: average/q_u
+      12590000211/allq:
+        dtype: f8
+        dimensions:
+        - nt
+        required: true
+        attrs:
+          long_name: 12590000211/allq
+      12590000211/A0hat:
+        dtype: f8
+        dimensions: []
+        required: true
+        attrs:
+          long_name: 12590000211/A0hat
+      12590000211/nahat:
+        dtype: f8
+        dimensions: []
+        required: true
+        attrs:
+          long_name: 12590000211/nahat
+      12590000211/x1hat:
+        dtype: f8
+        dimensions: []
+        required: true
+        attrs:
+          long_name: 12590000211/x1hat
+      12590000211/q_u:
+        dtype: f8
+        dimensions:
+        - nt
+        required: true
+        attrs:
+          long_name: 12590000211/q_u
+  consumes: []

@@ -1,0 +1,7 @@
+filepath: output/sos/{continent_id}_sword_v{number}_SOS_results.nc
+source:
+  repo: output
+  github_username: SWOT-Confluence
+  branch: main
+  commit: 3b57ffe241c85b6da03ad886e31b2cfae10c52b2
+  image_tag: output:latest

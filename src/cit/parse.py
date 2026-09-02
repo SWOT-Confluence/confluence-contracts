@@ -28,13 +28,31 @@ Planned (P1-10):
 """
 
 import inspect
+import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar
+from typing import ClassVar, get_args
 
 import yaml
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, ValidationError
+
+from cit.data import load_yaml, match_result_filename
+from cit.contract import Contract, DataType, ModuleContract, Produces, Source, VariableAttrs, VariableContract
+from cit.result import NetcdfResult
+
+
+logger = logging.getLogger(__name__)   # "cit.orchestrate" — child of "cit"
+_REPO_CONFIG = ConfigDict(extra="forbid", frozen=True, str_strip_whitespace=True)
+
+
+class RepoConfig(BaseModel):
+    """One module's hand-maintained parse inputs: its path template and provenance."""
+
+    model_config = _REPO_CONFIG
+
+    filepath: str
+    source: Source
 
 
 class Parser(ABC):
@@ -63,7 +81,7 @@ class Parser(ABC):
             output: Where to write the YAML; parent directories are created as needed.
             header: Comment block to emit above the document, e.g. a do-not-hand-edit banner.
         """
-        payload = data.model_dump(mode="json") if isinstance(data, BaseModel) else data
+        payload = data.model_dump(mode="json", exclude_none=True) if isinstance(data, BaseModel) else data
         document = yaml.dump(payload, default_flow_style=False, allow_unicode=True, sort_keys=False)
         path = Path(output)
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -78,7 +96,7 @@ class ContractParser(Parser):
     merge decisions on the caller's behalf.
     """
 
-    def __init__(self, module: str, module_file: Path) -> None:
+    def __init__(self, module: str, module_file: Path, repo_config: Path, version: str) -> None:
         """Bind this parser to the module and its result file.
 
         Args:
@@ -87,14 +105,72 @@ class ContractParser(Parser):
         """
         self.module = module
         self.module_file = Path(module_file)
+        self.repo_config = repo_config
+        self.version = version
 
-    def parse(self) -> BaseModel:
+    def parse(self) -> None:
         """Read the result file and return the draft contract describing it.
 
         Returns:
             The drafted :class:`~cit.contract.Contract` (P1-10).
         """
-        ...
+        # Get source configuration data
+        repo_config = RepoConfig.model_validate(load_yaml(self.repo_config))
+        if match_result_filename(repo_config.filepath, self.module_file.name) is None:
+            logger.warning(
+                "%s: --module-file %r does not match the %r template declared in %s; the drafted "
+                "contract will not discover files like it",
+                self.module, self.module_file.name, repo_config.filepath, self.repo_config,
+            )
+
+        # Read in module file to NetCDF class
+        with NetcdfResult(str(self.module_file)) as result:
+            produces = Produces(
+                filepath=repo_config.filepath,
+                dimensions=list(result.dimensions),
+                variables=self._variables(result),
+            )
+
+        # Create contract
+        contract = Contract(
+            version = self.version,
+            source = Source.model_validate(repo_config.source),
+            module=ModuleContract(
+                name=self.module,
+                produces=[produces],
+                consumes=[]
+            )
+        )
+
+        output_file = Path(__file__).resolve().parent / "resources" / "contracts" / f"{self.module}.yml"
+        self.write(data=contract, output=output_file)
+
+    def _variables(self, result: NetcdfResult) -> dict[str, VariableContract]:
+        """"""
+        variables = {}
+        for name, info in result.variables.items():
+            if info.dtype not in get_args(DataType):
+                logger.warning("skipping %r: dtype %r is not in the contract vocabulary %s",
+                                name, info.dtype, get_args(DataType))
+                continue
+
+            variables[name] = VariableContract(
+                dtype=info.dtype,
+                dimensions=list(info.dims),
+                required=True,
+                attrs=self._attrs(name, result.variable_attributes.get(name, {})),
+            )
+        return variables
+
+    def _attrs(self, var_name: str, result_attrs: dict) -> VariableAttrs | None:
+        """"""
+        fields = {k: v for k, v in result_attrs.items() if k in VariableAttrs.model_fields}
+        fields.setdefault("long_name", var_name)
+        try:
+            return VariableAttrs(**fields)
+        except ValidationError as error:
+            logger.warning("%s: dropping attrs -- %s", var_name, error)
+            return None
 
 
 class RulesParser(Parser, ABC):

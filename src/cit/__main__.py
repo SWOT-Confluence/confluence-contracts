@@ -14,77 +14,6 @@ _CHECKS_ALL = "all"
 logger = logging.getLogger("cit")
 
 
-def _validate(args: argparse.Namespace) -> int:
-    """Run ``cit validate``: stream a run mount's results against their contracts.
-
-    Args:
-        args: Parsed CLI arguments (see the ``validate`` subparser in :func:`build_parser`).
-
-    Returns:
-        The report's exit code: 1 if any finding is FAIL, else 0.
-
-    Raises:
-        SystemExit: If ``--results`` was not given -- none of the CLI's arguments are
-            ``required=True`` (so ``cit validate`` alone still parses), so this combination is
-            validated here instead, with a clear, actionable message rather than a traceback.
-    """
-    if not args.results:
-        raise SystemExit(
-            "cit validate: --results MOUNT is required (the run mount root, e.g. the directory "
-            "containing flpe/momma/)."
-        )
-    if args.max_files is not None and args.max_files < 1:
-        raise SystemExit(f"cit validate: --max-files must be at least 1 (got {args.max_files}).")
-
-    show_files = args.show_files or args.max_files is not None
-    max_files = DEFAULT_MAX_FILES if args.max_files is None else args.max_files
-    checks = None if args.checks == _CHECKS_ALL else ValidationSource(args.checks)
-    orchestrate = Orchestrate()
-    report = orchestrate.validate(
-        args.results,
-        strict=args.strict,
-        modules=args.module,
-        show_passed=args.show_passed,
-        show_files=show_files,
-        max_files=max_files,
-        checks=checks,
-    )
-
-    text = str(report)
-    print(text)  # noqa: T201 -- the report is the tool's stdout product, not a log line
-
-    if args.report:
-        Path(args.report).write_text(text + "\n")
-    if args.csv:
-        report.write_csv(args.csv)
-
-    return report.exit_code
-
-
-def _pair(value: str) -> tuple[str, str]:
-    """Parse a strict ``MODULE=PATH`` tagged value for ``--module-file`` and ``--rule-file``.
-
-    Both flags require an explicit name tag. Bare paths are rejected so the module identity
-    of a committed contract is always something the user typed, never inferred from a filename.
-
-    Args:
-        value: The raw argument, e.g. ``momma=/mnt/data/flpe/momma/12590000211_momma.nc``
-            or ``output=docs/sos-dataset/sos_metadata.xlsx``.
-
-    Returns:
-        A ``(name, path)`` pair, with whitespace stripped from both sides of the ``=``.
-
-    Raises:
-        argparse.ArgumentTypeError: If the value contains no ``=`` separator, or if either
-            the name or the path is empty after stripping whitespace.
-    """
-    name, sep, tail = value.partition("=")
-    name, tail = name.strip(), tail.strip()
-    if not sep or not name or not tail:
-        raise argparse.ArgumentTypeError(f"expected MODULE=VALUE, got {value!r}")
-    return name, tail
-
-
 class _SingleAction(argparse.Action):
     """Custom action for tagged flags: accumulate ``(name, path)`` pairs, reject duplicates.
 
@@ -117,63 +46,28 @@ class _SingleAction(argparse.Action):
         setattr(namespace, self.dest, [*current, values])
 
 
-def _parse(args: argparse.Namespace) -> int:
-    """Run ``cit parse``: build a parse plan from tagged module files and rules sources.
+def _pair(value: str) -> tuple[str, str]:
+    """Parse a strict ``MODULE=PATH`` tagged value for ``--module-file`` and ``--rule-file``.
+
+    Both flags require an explicit name tag. Bare paths are rejected so the module identity
+    of a committed contract is always something the user typed, never inferred from a filename.
 
     Args:
-        args: Parsed CLI arguments (see the ``parse`` subparser in :func:`build_parser`).
+        value: The raw argument, e.g. ``momma=/mnt/data/flpe/momma/12590000211_momma.nc``
+            or ``output=docs/sos-dataset/sos_metadata.xlsx``.
 
     Returns:
-        0 once the parse plan has been built (contract and rules bodies are drafted in P1-10).
+        A ``(name, path)`` pair, with whitespace stripped from both sides of the ``=``.
 
     Raises:
-        SystemExit: If ``--module-file`` was not given, or if the parse cannot be resolved --
-            the orchestrator raises a ``ValueError`` for that (e.g. an unregistered rules name),
-            translated here so the user sees a message rather than a traceback.
+        argparse.ArgumentTypeError: If the value contains no ``=`` separator, or if either
+            the name or the path is empty after stripping whitespace.
     """
-    if not args.module_file:
-        raise SystemExit(
-            "cit parse: --module-file MODULE=PATH is required (a result file to draft a "
-            "contract from; repeat it for each file)."
-        )
-
-    # _SingleAction's duplicate rejection is load-bearing: a repeated name would clobber here.
-    module_files: dict[str, str] = dict(args.module_file)
-
-    # args.rule_file is [(name, path), ...] or None; convert to {name: path} or None.
-    rule_files: dict[str, str] | None = dict(args.rule_file) if args.rule_file else None
-
-    orchestrate = Orchestrate()
-    try:
-        orchestrate.parse(module_files, rule_files, strict=args.strict)
-    except ValueError as error:
-        raise SystemExit(f"cit parse: {error}") from error
-
-    return 0
-
-
-def _configure_logging(verbose: bool) -> None:
-    """Configure the ``cit`` logger only: INFO by default, DEBUG when --verbose is set.
-
-    Deliberately does not call ``logging.basicConfig`` (which configures the *root* logger) --
-    that would also turn on INFO-level chatter from third-party loggers (netCDF4, pydantic) that
-    propagate to root. Attaching a handler directly to the ``cit`` logger and leaving
-    ``propagate`` at its default keeps this run's diagnostics on stderr without affecting any
-    other logger's terminal output.
-
-    Args:
-        verbose: When True, log at DEBUG; otherwise INFO.
-    """
-    handler = logging.StreamHandler(sys.stderr)
-    handler.setFormatter(
-        logging.Formatter(
-            "%(asctime)s %(levelname)-8s %(name)s: %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
-        )
-    )
-    logger.handlers.clear()
-    logger.addHandler(handler)
-    logger.setLevel(logging.DEBUG if verbose else logging.INFO)
+    name, sep, tail = value.partition("=")
+    name, tail = name.strip(), tail.strip()
+    if not sep or not name or not tail:
+        raise argparse.ArgumentTypeError(f"expected MODULE=VALUE, got {value!r}")
+    return name, tail
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -321,6 +215,21 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parse.add_argument(
+        "--version",
+        type=str,
+        help="The current version of Confluence this contract applies to.",
+    )
+    parse.add_argument(
+        "--repo-config",
+        action=_SingleAction,
+        type=_pair,
+        metavar="MODULE=PATH",
+        help=("Path to the repo configuration data (e.g., 'resouces/repo/metroman.yml')."
+              "Each MODULE name may appear at most once."
+              "The tag is the name of the repo configuration file."
+        ),
+    )
+    parse.add_argument(
         "--strict",
         action="store_true",
         help="Treat a parse with no --rule-file as an error rather than a warning.",
@@ -328,6 +237,115 @@ def build_parser() -> argparse.ArgumentParser:
     parse.set_defaults(func=_parse)
 
     return parser
+
+
+def _validate(args: argparse.Namespace) -> int:
+    """Run ``cit validate``: stream a run mount's results against their contracts.
+
+    Args:
+        args: Parsed CLI arguments (see the ``validate`` subparser in :func:`build_parser`).
+
+    Returns:
+        The report's exit code: 1 if any finding is FAIL, else 0.
+
+    Raises:
+        SystemExit: If ``--results`` was not given -- none of the CLI's arguments are
+            ``required=True`` (so ``cit validate`` alone still parses), so this combination is
+            validated here instead, with a clear, actionable message rather than a traceback.
+    """
+    if not args.results:
+        raise SystemExit(
+            "cit validate: --results MOUNT is required (the run mount root, e.g. the directory "
+            "containing flpe/momma/)."
+        )
+    if args.max_files is not None and args.max_files < 1:
+        raise SystemExit(f"cit validate: --max-files must be at least 1 (got {args.max_files}).")
+
+    show_files = args.show_files or args.max_files is not None
+    max_files = DEFAULT_MAX_FILES if args.max_files is None else args.max_files
+    checks = None if args.checks == _CHECKS_ALL else ValidationSource(args.checks)
+    orchestrate = Orchestrate()
+    report = orchestrate.validate(
+        args.results,
+        strict=args.strict,
+        modules=args.module,
+        show_passed=args.show_passed,
+        show_files=show_files,
+        max_files=max_files,
+        checks=checks,
+    )
+
+    text = str(report)
+    print(text)  # noqa: T201 -- the report is the tool's stdout product, not a log line
+
+    if args.report:
+        Path(args.report).write_text(text + "\n")
+    if args.csv:
+        report.write_csv(args.csv)
+
+    return report.exit_code
+
+
+def _parse(args: argparse.Namespace) -> int:
+    """Run ``cit parse``: build a parse plan from tagged module files and rules sources.
+
+    Args:
+        args: Parsed CLI arguments (see the ``parse`` subparser in :func:`build_parser`).
+
+    Returns:
+        0 once the parse plan has been built (contract and rules bodies are drafted in P1-10).
+
+    Raises:
+        SystemExit: If ``--module-file`` was not given, or if the parse cannot be resolved --
+            the orchestrator raises a ``ValueError`` for that (e.g. an unregistered rules name),
+            translated here so the user sees a message rather than a traceback.
+    """
+    if not args.module_file:
+        raise SystemExit(
+            "cit parse: --module-file MODULE=PATH is required (a result file to draft a "
+            "contract from; repeat it for each file)."
+        )
+
+    version: str = args.version
+
+    repo_config: dict[str, str] = dict(args.repo_config)
+
+    module_files: dict[str, str] = dict(args.module_file)
+
+    # args.rule_file is [(name, path), ...] or None; convert to {name: path} or None.
+    rule_files: dict[str, str] | None = dict(args.rule_file) if args.rule_file else None
+
+    orchestrate = Orchestrate()
+    try:
+        orchestrate.parse(version, repo_config, module_files, rule_files, strict=args.strict)
+    except ValueError as error:
+        raise SystemExit(f"cit parse: {error}") from error
+
+    return 0
+
+
+def _configure_logging(verbose: bool) -> None:
+    """Configure the ``cit`` logger only: INFO by default, DEBUG when --verbose is set.
+
+    Deliberately does not call ``logging.basicConfig`` (which configures the *root* logger) --
+    that would also turn on INFO-level chatter from third-party loggers (netCDF4, pydantic) that
+    propagate to root. Attaching a handler directly to the ``cit`` logger and leaving
+    ``propagate`` at its default keeps this run's diagnostics on stderr without affecting any
+    other logger's terminal output.
+
+    Args:
+        verbose: When True, log at DEBUG; otherwise INFO.
+    """
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setFormatter(
+        logging.Formatter(
+            "%(asctime)s %(levelname)-8s %(name)s: %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
+    )
+    logger.handlers.clear()
+    logger.addHandler(handler)
+    logger.setLevel(logging.DEBUG if verbose else logging.INFO)
 
 
 def main() -> NoReturn:
