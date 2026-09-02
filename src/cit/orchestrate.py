@@ -29,8 +29,10 @@ import logging
 from collections.abc import Iterable, Iterator, Mapping
 from pathlib import Path
 
+from cit.consume import ConsumesRegistry
 from cit.contract import Contract, Produces
 from cit.data import (
+    find_consumes_file,
     find_contract_files,
     find_result_files,
     find_rules_files,
@@ -86,6 +88,11 @@ class Orchestrate:
             metadata_rules = MetadataRules.model_validate(load_yaml(rules_file))
             rules[metadata_rules.module_name] = metadata_rules
         return rules
+
+    @functools.cached_property
+    def consumes(self) -> ConsumesRegistry:
+        """The module-interdependency registry (loaded and validated once, then cached)."""
+        return ConsumesRegistry.model_validate(load_yaml(find_consumes_file()))
 
     def iter_results(self, module: str, data_mount: str) -> Iterator[tuple[Produces, NetcdfResult]]:
         """Lazily yield one :class:`NetcdfResult` per produced file for ``module``.
@@ -225,14 +232,22 @@ class Orchestrate:
             )
 
         contracts: dict[str, ContractParser] = {
-            module: ContractParser(module, Path(path), Path(repo_config[module]), version)
+            module: ContractParser(
+                module, Path(path),
+                Path(repo_config[module]),
+                version,
+                self.consumes.modules.get(module, None)
+            )
             for module, path in module_files.items()
         }
 
         plan = ParsePlan(contracts=contracts, rules=rules)
 
-        for module_name, contract in plan.contracts.items():
+        for contract in plan.contracts.values():
             contract.parse()
+
+        # for rule in plan.rules.values():
+        #     rule.parse()
 
         # # Log the three-line summary so a library caller and the CLI see the same record.
         # logger.info("contracts: %s", ", ".join(f"'{m}'" for m in sorted(contracts)) or "none")

@@ -1,5 +1,6 @@
 # Module interdependencies for every module in the Confluence Step Function.
-# modules.<name>.consumes[] entries are cit.contract.Consumes {filepath, variables}.
+# modules.<name>.consumes[] entries are {module, filepath, variables}: module = the producer of filepath
+#   (null = run configuration, produced by no module). {filepath, variables} validates as cit.contract.Consumes.
 # external_sources are pipeline roots no module produces -- documented here, excluded from consumes.
 # external_sources[].cross_check: 'producer' = treat as a producing contract with the listed variables;
 #   'ignore' = no sample file available; skip (do not fail) any consumes entry pointing at this filepath.
@@ -244,7 +245,8 @@ modules:
     - input/expanded_sicsets_{continent}.json
     - input/expanded_neosets_{continent}.json
     consumes:
-    - filepath: input/continent-setfinder.json
+    - module: null
+      filepath: input/continent-setfinder.json
       variables: []
   combine_data:
     stage: 2
@@ -259,11 +261,14 @@ modules:
     - input/expanded_reaches_of_interest.json
     - input/expanded_{algorithm}sets.json
     consumes:
-    - filepath: input/continent.json
+    - module: null
+      filepath: input/continent.json
       variables: []
-    - filepath: input/{algorithm}sets_{continent}.json
+    - module: setfinder
+      filepath: input/{algorithm}sets_{continent}.json
       variables: []
-    - filepath: input/reaches_of_interest.json
+    - module: null
+      filepath: input/reaches_of_interest.json
       variables: []
   input:
     stage: 3
@@ -271,7 +276,8 @@ modules:
     produces_filepaths:
     - input/swot/{reach_id}_SWOT.nc
     consumes:
-    - filepath: input/reaches.json
+    - module: combine_data
+      filepath: input/reaches.json
       variables: []
   prediagnostics:
     stage: 4
@@ -281,9 +287,11 @@ modules:
     produces_filepaths:
     - diagnostics/prediagnostics/{reach_id}_prediagnostics.nc
     consumes:
-    - filepath: input/reaches.json
+    - module: combine_data
+      filepath: input/reaches.json
       variables: []
-    - filepath: input/swot/{reach_id}_SWOT.nc
+    - module: input
+      filepath: input/swot/{reach_id}_SWOT.nc
       variables:
       - node/d_x_area
       - node/dark_frac
@@ -321,7 +329,8 @@ modules:
     produces_filepaths:
     - input/sos/{continent}_sword_v{number}_SOS_priors.nc
     consumes:
-    - filepath: input/swot/{reach_id}_SWOT.nc
+    - module: input
+      filepath: input/swot/{reach_id}_SWOT.nc
       variables:
       - reach/d_x_area
       - reach/reach_id
@@ -335,9 +344,11 @@ modules:
     produces_filepaths:
     - flpe/metroman/sets/{set_id}_metroman.nc
     consumes:
-    - filepath: input/metrosets.json
+    - module: combine_data
+      filepath: input/metrosets.json
       variables: []
-    - filepath: input/swot/{reach_id}_SWOT.nc
+    - module: input
+      filepath: input/swot/{reach_id}_SWOT.nc
       variables:
       - node/d_x_area
       - node/dark_frac
@@ -365,7 +376,8 @@ modules:
       - reach/width
       - reach/wse
       - reach/xovr_cal_q
-    - filepath: input/sos/{continent}_sword_v{number}_SOS_priors.nc
+    - module: priors
+      filepath: input/sos/{continent}_sword_v{number}_SOS_priors.nc
       variables:
       - model/area_estimate_flag
       - model/bad_prior_source
@@ -391,9 +403,11 @@ modules:
     produces_filepaths:
     - flpe/metroman/{reach_id}_metroman.nc
     consumes:
-    - filepath: input/metrosets.json
+    - module: combine_data
+      filepath: input/metrosets.json
       variables: []
-    - filepath: flpe/metroman/sets/{set_id}_metroman.nc
+    - module: metroman
+      filepath: flpe/metroman/sets/{set_id}_metroman.nc
       variables:
       - A0hat
       - allq
@@ -410,9 +424,11 @@ modules:
     produces_filepaths:
     - flpe/hivdi/{reach_id}_hivdi.nc
     consumes:
-    - filepath: input/reaches.json
+    - module: combine_data
+      filepath: input/reaches.json
       variables: []
-    - filepath: input/swot/{reach_id}_SWOT.nc
+    - module: input
+      filepath: input/swot/{reach_id}_SWOT.nc
       variables:
       - node/d_x_area
       - node/dark_frac
@@ -440,7 +456,8 @@ modules:
       - reach/width
       - reach/wse
       - reach/xovr_cal_q
-    - filepath: input/sos/{continent}_sword_v{number}_SOS_priors.nc
+    - module: priors
+      filepath: input/sos/{continent}_sword_v{number}_SOS_priors.nc
       variables:
       - model/area_estimate_flag
       - model/bad_prior_source
@@ -466,9 +483,11 @@ modules:
     produces_filepaths:
     - flpe/momma/{reach_id}_momma.nc
     consumes:
-    - filepath: input/reaches.json
+    - module: combine_data
+      filepath: input/reaches.json
       variables: []
-    - filepath: input/swot/{reach_id}_SWOT.nc
+    - module: input
+      filepath: input/swot/{reach_id}_SWOT.nc
       variables:
       - node/d_x_area
       - node/dark_frac
@@ -500,7 +519,8 @@ modules:
       - reach/wse
       - reach/wse_u
       - reach/xovr_cal_q
-    - filepath: input/sos/{continent}_sword_v{number}_SOS_priors.nc
+    - module: priors
+      filepath: input/sos/{continent}_sword_v{number}_SOS_priors.nc
       variables:
       - MEFCCWP/CAL
       - MEFCCWP/MEFCCWP_flow_duration_q
@@ -638,9 +658,11 @@ modules:
     produces_filepaths:
     - flpe/sic4dvar/{reach_id}_sic4dvar.nc
     consumes:
-    - filepath: input/reaches.json
+    - module: combine_data
+      filepath: input/reaches.json
       variables: []
-    - filepath: input/swot/{reach_id}_SWOT.nc
+    - module: input
+      filepath: input/swot/{reach_id}_SWOT.nc
       variables:
       - node/d_x_area
       - node/dark_frac
@@ -678,7 +700,8 @@ modules:
       - reach/width
       - reach/wse
       - reach/xovr_cal_q
-    - filepath: input/sos/{continent}_sword_v{number}_SOS_priors.nc
+    - module: priors
+      filepath: input/sos/{continent}_sword_v{number}_SOS_priors.nc
       variables:
       - model/area_estimate_flag
       - model/bad_prior_source
@@ -704,9 +727,11 @@ modules:
     produces_filepaths:
     - flpe/sad/{reach_id}_sad.nc
     consumes:
-    - filepath: input/reaches.json
+    - module: combine_data
+      filepath: input/reaches.json
       variables: []
-    - filepath: input/swot/{reach_id}_SWOT.nc
+    - module: input
+      filepath: input/swot/{reach_id}_SWOT.nc
       variables:
       - node/d_x_area
       - node/dark_frac
@@ -734,7 +759,8 @@ modules:
       - reach/width
       - reach/wse
       - reach/xovr_cal_q
-    - filepath: input/sos/{continent}_sword_v{number}_SOS_priors.nc
+    - module: priors
+      filepath: input/sos/{continent}_sword_v{number}_SOS_priors.nc
       variables:
       - model/area_estimate_flag
       - model/bad_prior_source
@@ -762,9 +788,11 @@ modules:
     produces_filepaths:
     - flpe/geobam/{reach_id}_geobam.nc
     consumes:
-    - filepath: input/reaches.json
+    - module: combine_data
+      filepath: input/reaches.json
       variables: []
-    - filepath: input/swot/{reach_id}_SWOT.nc
+    - module: input
+      filepath: input/swot/{reach_id}_SWOT.nc
       variables:
       - node/d_x_area
       - node/dark_frac
@@ -792,7 +820,8 @@ modules:
       - reach/width
       - reach/wse
       - reach/xovr_cal_q
-    - filepath: input/sos/{continent}_sword_v{number}_SOS_priors.nc
+    - module: priors
+      filepath: input/sos/{continent}_sword_v{number}_SOS_priors.nc
       variables:
       - gbpriors/node/Serr_sd
       - gbpriors/node/Werr_sd
@@ -898,9 +927,11 @@ modules:
     produces_filepaths:
     - flpe/busboi/{reach_id}_busboi.nc
     consumes:
-    - filepath: input/reaches.json
+    - module: combine_data
+      filepath: input/reaches.json
       variables: []
-    - filepath: input/swot/{reach_id}_SWOT.nc
+    - module: input
+      filepath: input/swot/{reach_id}_SWOT.nc
       variables:
       - node/d_x_area
       - node/dark_frac
@@ -928,7 +959,8 @@ modules:
       - reach/width
       - reach/wse
       - reach/xovr_cal_q
-    - filepath: input/sos/{continent}_sword_v{number}_SOS_priors.nc
+    - module: priors
+      filepath: input/sos/{continent}_sword_v{number}_SOS_priors.nc
       variables:
       - model/area_estimate_flag
       - model/bad_prior_source
@@ -954,7 +986,8 @@ modules:
     produces_filepaths:
     - input/lakeflow/viable/viable_locations.csv
     consumes:
-    - filepath: input/reaches_of_interest.json
+    - module: null
+      filepath: input/reaches_of_interest.json
       variables: []
   lakeflow_deploy:
     stage: 6
@@ -962,9 +995,11 @@ modules:
     produces_filepaths:
     - flpe/lakeflow/{lake_id}_lakeflow.nc
     consumes:
-    - filepath: input/lakeflow/viable/viable_locations.csv
+    - module: lakeflow_input
+      filepath: input/lakeflow/viable/viable_locations.csv
       variables: []
-    - filepath: input/sos/{continent}_sword_v{number}_SOS_priors.nc
+    - module: priors
+      filepath: input/sos/{continent}_sword_v{number}_SOS_priors.nc
       variables:
       - model/area_estimate_flag
       - model/bad_prior_source
@@ -984,7 +1019,8 @@ modules:
       - reaches/reach_id
       - reaches/x
       - reaches/y
-    - filepath: input/swot/{reach_id}_SWOT.nc
+    - module: input
+      filepath: input/swot/{reach_id}_SWOT.nc
       variables:
       - node/d_x_area
       - node/dark_frac
@@ -1018,7 +1054,8 @@ modules:
     produces_filepaths:
     - input/ssc/ssc_hls_list.json
     consumes:
-    - filepath: input/reaches.json
+    - module: combine_data
+      filepath: input/reaches.json
       variables: []
   ssc_model_deployment:
     stage: 6
@@ -1026,7 +1063,8 @@ modules:
     produces_filepaths:
     - flpe/ssc/{reach_id}_ssc.nc
     consumes:
-    - filepath: input/ssc/ssc_hls_list.json
+    - module: ssc_input
+      filepath: input/ssc/ssc_hls_list.json
       variables: []
   consensus:
     stage: 8
@@ -1034,12 +1072,13 @@ modules:
     produces_filepaths:
     - flpe/consensus/{reach_id}_consensus.nc
     consumes:
-    - filepath: input/reaches.json
+    - module: combine_data
+      filepath: input/reaches.json
       variables: []
-    - &id001
+    - module: hivdi
       filepath: flpe/hivdi/{reach_id}_hivdi.nc
       variables: []
-    - &id002
+    - module: metroman_consolidation
       filepath: flpe/metroman/{reach_id}_metroman.nc
       variables:
       - average/A0hat
@@ -1048,7 +1087,7 @@ modules:
       - average/q_u
       - average/x1hat
       - time_str
-    - &id003
+    - module: momma
       filepath: flpe/momma/{reach_id}_momma.nc
       variables:
       - Q
@@ -1059,7 +1098,7 @@ modules:
       - stage
       - time_str
       - width
-    - &id004
+    - module: sic4dvar
       filepath: flpe/sic4dvar/{reach_id}_sic4dvar.nc
       variables:
       - A0
@@ -1067,7 +1106,7 @@ modules:
       - Q_mm
       - n
       - q_u
-    - &id005
+    - module: sad
       filepath: flpe/sad/{reach_id}_sad.nc
       variables:
       - A0
@@ -1075,7 +1114,7 @@ modules:
       - Qa
       - n
       - time_str
-    - &id006
+    - module: neobam
       filepath: flpe/geobam/{reach_id}_geobam.nc
       variables:
       - logn/mean
@@ -1085,13 +1124,14 @@ modules:
       - r/mean
       - r/sd
       - time_str
-    - &id007
+    - module: busboi
       filepath: flpe/busboi/{reach_id}_busboi.nc
       variables:
       - prior_q/q
       - q/q
       - time
-    - filepath: input/swot/{reach_id}_SWOT.nc
+    - module: input
+      filepath: input/swot/{reach_id}_SWOT.nc
       variables:
       - reach/reach_id
       - reach/time
@@ -1102,16 +1142,66 @@ modules:
     produces_filepaths:
     - diagnostics/postdiagnostics/reach/{reach_id}_flpe_diag.nc
     consumes:
-    - filepath: input/reaches.json
+    - module: combine_data
+      filepath: input/reaches.json
       variables: []
-    - *id001
-    - *id002
-    - *id003
-    - *id004
-    - *id005
-    - *id006
-    - *id007
-    - filepath: input/sos/{continent}_sword_v{number}_SOS_priors.nc
+    - module: hivdi
+      filepath: flpe/hivdi/{reach_id}_hivdi.nc
+      variables: []
+    - module: metroman_consolidation
+      filepath: flpe/metroman/{reach_id}_metroman.nc
+      variables:
+      - average/A0hat
+      - average/allq
+      - average/nahat
+      - average/q_u
+      - average/x1hat
+      - time_str
+    - module: momma
+      filepath: flpe/momma/{reach_id}_momma.nc
+      variables:
+      - Q
+      - Q_constrained
+      - Qmean_momma
+      - Qmean_momma.constrained
+      - slope
+      - stage
+      - time_str
+      - width
+    - module: sic4dvar
+      filepath: flpe/sic4dvar/{reach_id}_sic4dvar.nc
+      variables:
+      - A0
+      - Q_da
+      - Q_mm
+      - n
+      - q_u
+    - module: sad
+      filepath: flpe/sad/{reach_id}_sad.nc
+      variables:
+      - A0
+      - Q_u
+      - Qa
+      - n
+      - time_str
+    - module: neobam
+      filepath: flpe/geobam/{reach_id}_geobam.nc
+      variables:
+      - logn/mean
+      - logn/sd
+      - q/q
+      - q/q_sd
+      - r/mean
+      - r/sd
+      - time_str
+    - module: busboi
+      filepath: flpe/busboi/{reach_id}_busboi.nc
+      variables:
+      - prior_q/q
+      - q/q
+      - time
+    - module: priors
+      filepath: input/sos/{continent}_sword_v{number}_SOS_priors.nc
       variables:
       - model/flow_duration_q
       - model/max_q
@@ -1125,16 +1215,66 @@ modules:
     produces_filepaths:
     - moi/{reach_id}_integrator.nc
     consumes:
-    - filepath: input/basin.json
+    - module: combine_data
+      filepath: input/basin.json
       variables: []
-    - *id001
-    - *id002
-    - *id003
-    - *id004
-    - *id005
-    - *id006
-    - *id007
-    - filepath: input/swot/{reach_id}_SWOT.nc
+    - module: hivdi
+      filepath: flpe/hivdi/{reach_id}_hivdi.nc
+      variables: []
+    - module: metroman_consolidation
+      filepath: flpe/metroman/{reach_id}_metroman.nc
+      variables:
+      - average/A0hat
+      - average/allq
+      - average/nahat
+      - average/q_u
+      - average/x1hat
+      - time_str
+    - module: momma
+      filepath: flpe/momma/{reach_id}_momma.nc
+      variables:
+      - Q
+      - Q_constrained
+      - Qmean_momma
+      - Qmean_momma.constrained
+      - slope
+      - stage
+      - time_str
+      - width
+    - module: sic4dvar
+      filepath: flpe/sic4dvar/{reach_id}_sic4dvar.nc
+      variables:
+      - A0
+      - Q_da
+      - Q_mm
+      - n
+      - q_u
+    - module: sad
+      filepath: flpe/sad/{reach_id}_sad.nc
+      variables:
+      - A0
+      - Q_u
+      - Qa
+      - n
+      - time_str
+    - module: neobam
+      filepath: flpe/geobam/{reach_id}_geobam.nc
+      variables:
+      - logn/mean
+      - logn/sd
+      - q/q
+      - q/q_sd
+      - r/mean
+      - r/sd
+      - time_str
+    - module: busboi
+      filepath: flpe/busboi/{reach_id}_busboi.nc
+      variables:
+      - prior_q/q
+      - q/q
+      - time
+    - module: input
+      filepath: input/swot/{reach_id}_SWOT.nc
       variables:
       - reach/d_x_area
       - reach/reach_id
@@ -1148,9 +1288,11 @@ modules:
     produces_filepaths:
     - diagnostics/postdiagnostics/basin/{reach_id}_moi_diag.nc
     consumes:
-    - filepath: input/reaches.json
+    - module: combine_data
+      filepath: input/reaches.json
       variables: []
-    - filepath: moi/{reach_id}_integrator.nc
+    - module: moi
+      filepath: moi/{reach_id}_integrator.nc
       variables:
       - hivdi/Abar
       - hivdi/alpha
@@ -1193,24 +1335,75 @@ modules:
       - sic4dvar/qbar_basinScale
       - sic4dvar/qbar_reachScale
       - sic4dvar/sbQ_rel
-    - *id001
-    - *id002
-    - *id003
-    - *id004
-    - *id005
-    - *id006
-    - *id007
+    - module: hivdi
+      filepath: flpe/hivdi/{reach_id}_hivdi.nc
+      variables: []
+    - module: metroman_consolidation
+      filepath: flpe/metroman/{reach_id}_metroman.nc
+      variables:
+      - average/A0hat
+      - average/allq
+      - average/nahat
+      - average/q_u
+      - average/x1hat
+      - time_str
+    - module: momma
+      filepath: flpe/momma/{reach_id}_momma.nc
+      variables:
+      - Q
+      - Q_constrained
+      - Qmean_momma
+      - Qmean_momma.constrained
+      - slope
+      - stage
+      - time_str
+      - width
+    - module: sic4dvar
+      filepath: flpe/sic4dvar/{reach_id}_sic4dvar.nc
+      variables:
+      - A0
+      - Q_da
+      - Q_mm
+      - n
+      - q_u
+    - module: sad
+      filepath: flpe/sad/{reach_id}_sad.nc
+      variables:
+      - A0
+      - Q_u
+      - Qa
+      - n
+      - time_str
+    - module: neobam
+      filepath: flpe/geobam/{reach_id}_geobam.nc
+      variables:
+      - logn/mean
+      - logn/sd
+      - q/q
+      - q/q_sd
+      - r/mean
+      - r/sd
+      - time_str
+    - module: busboi
+      filepath: flpe/busboi/{reach_id}_busboi.nc
+      variables:
+      - prior_q/q
+      - q/q
+      - time
   coastalq:
     stage: 11
     sfn_state: coastalq
     produces_filepaths:
     - flpe/coastalq/{reach_id}_coastalq.nc
     consumes:
-    - filepath: input/reaches.json
+    - module: combine_data
+      filepath: input/reaches.json
       variables: []
-    - filepath: moi/{reach_id}_integrator.nc
+    - module: moi
+      filepath: moi/{reach_id}_integrator.nc
       variables: []
-    - filepath: flpe/consensus/{reach_id}_consensus.nc
+    - module: consensus
+      filepath: flpe/consensus/{reach_id}_consensus.nc
       variables: []
   offline:
     stage: 12
@@ -1218,9 +1411,11 @@ modules:
     produces_filepaths:
     - offline/{reach_id}_offline.nc
     consumes:
-    - filepath: input/reaches.json
+    - module: combine_data
+      filepath: input/reaches.json
       variables: []
-    - filepath: moi/{reach_id}_integrator.nc
+    - module: moi
+      filepath: moi/{reach_id}_integrator.nc
       variables:
       - hivdi/Abar
       - hivdi/alpha
@@ -1263,7 +1458,8 @@ modules:
       - sic4dvar/qbar_basinScale
       - sic4dvar/qbar_reachScale
       - sic4dvar/sbQ_rel
-    - filepath: input/swot/{reach_id}_SWOT.nc
+    - module: input
+      filepath: input/swot/{reach_id}_SWOT.nc
       variables:
       - node/d_x_area
       - node/dark_frac
@@ -1291,7 +1487,8 @@ modules:
       - reach/width
       - reach/wse
       - reach/xovr_cal_q
-    - filepath: input/sos/{continent}_sword_v{number}_SOS_priors.nc
+    - module: priors
+      filepath: input/sos/{continent}_sword_v{number}_SOS_priors.nc
       variables:
       - model/area_estimate_flag
       - model/bad_prior_source
@@ -1311,13 +1508,61 @@ modules:
       - reaches/reach_id
       - reaches/x
       - reaches/y
-    - *id001
-    - *id002
-    - *id003
-    - *id004
-    - *id005
-    - *id006
-    - *id007
+    - module: hivdi
+      filepath: flpe/hivdi/{reach_id}_hivdi.nc
+      variables: []
+    - module: metroman_consolidation
+      filepath: flpe/metroman/{reach_id}_metroman.nc
+      variables:
+      - average/A0hat
+      - average/allq
+      - average/nahat
+      - average/q_u
+      - average/x1hat
+      - time_str
+    - module: momma
+      filepath: flpe/momma/{reach_id}_momma.nc
+      variables:
+      - Q
+      - Q_constrained
+      - Qmean_momma
+      - Qmean_momma.constrained
+      - slope
+      - stage
+      - time_str
+      - width
+    - module: sic4dvar
+      filepath: flpe/sic4dvar/{reach_id}_sic4dvar.nc
+      variables:
+      - A0
+      - Q_da
+      - Q_mm
+      - n
+      - q_u
+    - module: sad
+      filepath: flpe/sad/{reach_id}_sad.nc
+      variables:
+      - A0
+      - Q_u
+      - Qa
+      - n
+      - time_str
+    - module: neobam
+      filepath: flpe/geobam/{reach_id}_geobam.nc
+      variables:
+      - logn/mean
+      - logn/sd
+      - q/q
+      - q/q_sd
+      - r/mean
+      - r/sd
+      - time_str
+    - module: busboi
+      filepath: flpe/busboi/{reach_id}_busboi.nc
+      variables:
+      - prior_q/q
+      - q/q
+      - time
   validation:
     stage: 13
     sfn_state: Validation
@@ -1325,9 +1570,11 @@ modules:
     - validation/stats/{reach_id}_validation.nc
     - validation/figs/{reach_id}_{algorithm}.jpg
     consumes:
-    - filepath: input/reaches.json
+    - module: combine_data
+      filepath: input/reaches.json
       variables: []
-    - filepath: moi/{reach_id}_integrator.nc
+    - module: moi
+      filepath: moi/{reach_id}_integrator.nc
       variables:
       - hivdi/Abar
       - hivdi/alpha
@@ -1370,7 +1617,8 @@ modules:
       - sic4dvar/qbar_basinScale
       - sic4dvar/qbar_reachScale
       - sic4dvar/sbQ_rel
-    - filepath: offline/{reach_id}_offline.nc
+    - module: offline
+      filepath: offline/{reach_id}_offline.nc
       variables:
       - d_x_area
       - d_x_area_u
@@ -1433,18 +1681,68 @@ modules:
       - dschg_s_u
       - dschg_ssf
       - nt
-    - filepath: flpe/consensus/{reach_id}_consensus.nc
+    - module: consensus
+      filepath: flpe/consensus/{reach_id}_consensus.nc
       variables:
       - consensus_q
       - time_str
-    - *id001
-    - *id002
-    - *id003
-    - *id004
-    - *id005
-    - *id006
-    - *id007
-    - filepath: input/sos/{continent}_sword_v{number}_SOS_priors.nc
+    - module: hivdi
+      filepath: flpe/hivdi/{reach_id}_hivdi.nc
+      variables: []
+    - module: metroman_consolidation
+      filepath: flpe/metroman/{reach_id}_metroman.nc
+      variables:
+      - average/A0hat
+      - average/allq
+      - average/nahat
+      - average/q_u
+      - average/x1hat
+      - time_str
+    - module: momma
+      filepath: flpe/momma/{reach_id}_momma.nc
+      variables:
+      - Q
+      - Q_constrained
+      - Qmean_momma
+      - Qmean_momma.constrained
+      - slope
+      - stage
+      - time_str
+      - width
+    - module: sic4dvar
+      filepath: flpe/sic4dvar/{reach_id}_sic4dvar.nc
+      variables:
+      - A0
+      - Q_da
+      - Q_mm
+      - n
+      - q_u
+    - module: sad
+      filepath: flpe/sad/{reach_id}_sad.nc
+      variables:
+      - A0
+      - Q_u
+      - Qa
+      - n
+      - time_str
+    - module: neobam
+      filepath: flpe/geobam/{reach_id}_geobam.nc
+      variables:
+      - logn/mean
+      - logn/sd
+      - q/q
+      - q/q_sd
+      - r/mean
+      - r/sd
+      - time_str
+    - module: busboi
+      filepath: flpe/busboi/{reach_id}_busboi.nc
+      variables:
+      - prior_q/q
+      - q/q
+      - time
+    - module: priors
+      filepath: input/sos/{continent}_sword_v{number}_SOS_priors.nc
       variables:
       - MEFCCWP/CAL
       - MEFCCWP/MEFCCWP_flow_duration_q
@@ -1558,7 +1856,8 @@ modules:
       - historicQ/grdc/grdc_two_year_return_q
       - historicQ/grdc/num_days
       - historicQ/grdc/num_grdc_reaches
-    - filepath: input/swot/{reach_id}_SWOT.nc
+    - module: input
+      filepath: input/swot/{reach_id}_SWOT.nc
       variables:
       - reach/reach_id
       - reach/time
@@ -1567,13 +1866,19 @@ modules:
     stage: 14
     sfn_state: Output | SSC Output | Lakeflow Output | SSC Lakeflow Output
     notes: ssc and lakeflow only in the SSC*/Lakeflow* variants. sad and neobam/geobam are NOT in any -m list of
-      the current ASL -> the current output does not publish them.
+      the current ASL -> the current output does not publish them. consumes[].variables for momma/metroman/sic4dvar/hivdi/busboi/consensus/validation
+      are the exact variables present in the corresponding SOS_results.nc groups (na, end_to_end_mnt), mapped to
+      producer names. Entries for modules absent from that run (priors, moi, prediagnostics, swot, coastalq, ssc,
+      lakeflow) are unchanged.
     produces_filepaths:
     - output/sos/{continent}_sword_v{number}_SOS_results.nc
+    consumes_sample: end_to_end_mnt/output/sos/na_sword_v17_SOS_results.nc
     consumes:
-    - filepath: input/continent.json
+    - module: null
+      filepath: input/continent.json
       variables: []
-    - filepath: input/sos/{continent}_sword_v{number}_SOS_priors.nc
+    - module: priors
+      filepath: input/sos/{continent}_sword_v{number}_SOS_priors.nc
       variables:
       - DWA/CAL
       - DWA/DWA_flow_duration_q
@@ -1715,23 +2020,21 @@ modules:
       - reaches/river_name
       - reaches/x
       - reaches/y
-    - filepath: flpe/hivdi/{reach_id}_hivdi.nc
-      variables: []
-    - filepath: flpe/metroman/{reach_id}_metroman.nc
+    - module: hivdi
+      filepath: flpe/hivdi/{reach_id}_hivdi.nc
       variables:
-      - 12590000211/A0hat
-      - 12590000211/allq
-      - 12590000211/nahat
-      - 12590000211/q_u
-      - 12590000211/x1hat
+      - A0
+      - Q
+    - module: metroman_consolidation
+      filepath: flpe/metroman/{reach_id}_metroman.nc
+      variables:
       - average/A0hat
       - average/allq
       - average/nahat
       - average/q_u
       - average/x1hat
-      - nt
-      - time_str
-    - filepath: moi/{reach_id}_integrator.nc
+    - module: moi
+      filepath: moi/{reach_id}_integrator.nc
       variables:
       - hivdi/Abar
       - hivdi/alpha
@@ -1774,7 +2077,8 @@ modules:
       - sic4dvar/qbar_basinScale
       - sic4dvar/qbar_reachScale
       - sic4dvar/sbQ_rel
-    - filepath: flpe/momma/{reach_id}_momma.nc
+    - module: momma
+      filepath: flpe/momma/{reach_id}_momma.nc
       variables:
       - Froude_bkfl_diag_Smean
       - Q
@@ -1804,32 +2108,28 @@ modules:
       - n
       - n_bkfl_Qb_prior
       - n_bkfl_slope
-      - nb
-      - nt
       - seg
       - slope
       - stage
-      - time_str
       - v
       - vel_bkfl_Qb_prior
       - width
       - width_bkfl_solved_obs
       - width_stage_corr
-      - x
       - zero_flow_stage
-    - filepath: flpe/busboi/{reach_id}_busboi.nc
+    - module: busboi
+      filepath: flpe/busboi/{reach_id}_busboi.nc
       variables:
       - bed/chainage
       - bed/elevation
-      - nt
-      - nx
       - prior_q/q
       - q/q
       - r/db
       - r/mean
       - r/wb
       - time
-    - filepath: diagnostics/prediagnostics/{reach_id}_prediagnostics.nc
+    - module: prediagnostics
+      filepath: diagnostics/prediagnostics/{reach_id}_prediagnostics.nc
       variables:
       - node/d_x_area_flag
       - node/dark_frac
@@ -1860,28 +2160,17 @@ modules:
       - reach/x_trk_dist_flag
       - reach/xovr_cal_q
       - time_steps
-    - filepath: flpe/sic4dvar/{reach_id}_sic4dvar.nc
+    - module: sic4dvar
+      filepath: flpe/sic4dvar/{reach_id}_sic4dvar.nc
       variables:
       - A0
-      - K
       - Q_da
       - Q_mm
-      - bb
-      - dry_area
       - elevation
-      - hydraulic_radius
       - n
-      - nt
-      - nx
-      - q_u
-      - reach_elevation
-      - reach_width
-      - times
-      - wet_area
       - width
-      - width_min
-      - z_bed
-    - filepath: input/swot/{reach_id}_SWOT.nc
+    - module: input
+      filepath: input/swot/{reach_id}_SWOT.nc
       variables:
       - node/d_x_area
       - node/d_x_area_u
@@ -1950,9 +2239,11 @@ modules:
       - reach/wse_u
       - reach/xovr_cal_q
       - reach/xtrk_dist
-    - filepath: flpe/coastalq/{reach_id}_coastalq.nc
+    - module: coastalq
+      filepath: flpe/coastalq/{reach_id}_coastalq.nc
       variables: []
-    - filepath: validation/stats/{reach_id}_validation.nc
+    - module: validation
+      filepath: validation/stats/{reach_id}_validation.nc
       variables:
       - KGE_flpe
       - KGE_moi
@@ -1972,7 +2263,6 @@ modules:
       - algorithm_flpe
       - algorithm_moi
       - algorithm_o
-      - consensus_flpe
       - gageID_flpe
       - gageID_moi
       - gageID_o
@@ -1988,14 +2278,15 @@ modules:
       - testn_flpe
       - testn_moi
       - testn_o
-      - time
-    - filepath: flpe/consensus/{reach_id}_consensus.nc
+    - module: consensus
+      filepath: flpe/consensus/{reach_id}_consensus.nc
       variables:
       - consensus_q
-      - time_str
-    - filepath: flpe/ssc/{reach_id}_ssc.nc
+    - module: ssc_model_deployment
+      filepath: flpe/ssc/{reach_id}_ssc.nc
       variables: []
-    - filepath: flpe/lakeflow/{lake_id}_lakeflow.nc
+    - module: lakeflow_deploy
+      filepath: flpe/lakeflow/{lake_id}_lakeflow.nc
       variables: []
   report:
     stage: 15

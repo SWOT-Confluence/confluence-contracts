@@ -37,6 +37,7 @@ from typing import ClassVar, get_args
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from cit.consume import ModuleDependencies
 from cit.contract import (
     Contract,
     DataType,
@@ -115,7 +116,7 @@ class ContractParser(Parser):
     merge decisions on the caller's behalf.
     """
 
-    def __init__(self, module: str, module_file: Path, repo_config: Path, version: str) -> None:
+    def __init__(self, module: str, module_file: Path, repo_config: Path, version: str, module_deps: ModuleDependencies) -> None:
         """Bind this parser to the module and its result file.
 
         Args:
@@ -129,6 +130,8 @@ class ContractParser(Parser):
         self.module_file = Path(module_file)
         self.repo_config = repo_config
         self.version = version
+        self.module_deps = module_deps
+        self.output_dir = Path(__file__).resolve().parent / "resources" / "contracts"
 
     def parse(self) -> None:
         """Read the result file and return the draft contract describing it.
@@ -145,13 +148,16 @@ class ContractParser(Parser):
                 self.module, self.module_file.name, repo_config.filepath, self.repo_config,
             )
 
-        # Read in module file to NetCDF class
+        # Retrieve what the module produces
         with NetcdfResult(str(self.module_file)) as result:
             produces = Produces(
                 filepath=repo_config.filepath,
                 dimensions=list(result.dimensions),
                 variables=self._variables(result, repo_config),
             )
+
+        # Retrieve what the module consumes
+        consumes = self.module_deps.consumes if self.module_deps else []
 
         # Create contract
         contract = Contract(
@@ -160,11 +166,12 @@ class ContractParser(Parser):
             module=ModuleContract(
                 name=self.module,
                 produces=[produces],
-                consumes=[]
+                consumes=consumes
             )
         )
 
-        output_file = Path(__file__).resolve().parent / "resources" / "contracts" / f"{self.module}.yml"
+        # Save the contract to the repo
+        output_file = self.output_dir / f"{self.module}.yml"
         self.write(data=contract, output=output_file)
 
     def _variables(

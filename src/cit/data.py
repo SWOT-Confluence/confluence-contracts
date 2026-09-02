@@ -15,6 +15,7 @@ id or continent a file belongs to.
 import re
 from collections.abc import Iterable
 from importlib.resources import files
+from importlib.resources.abc import Traversable
 from pathlib import Path
 
 import yaml
@@ -154,7 +155,12 @@ def find_rules_files() -> list:
     )
 
 
-def load_yaml(path: str | Path) -> dict:
+def find_consumes_file() -> Traversable:
+    """Return the bundled module-interdependency registry."""
+    return files("cit.resources").joinpath("confluence_consumes.yml")
+
+
+def load_yaml(path: str | Path | Traversable) -> dict:
     """Read a YAML file into a plain dict (low-level; no model validation).
 
     Args:
@@ -163,4 +169,6 @@ def load_yaml(path: str | Path) -> dict:
     Returns:
         The parsed YAML as a dict.
     """
-    return yaml.safe_load(Path(path).read_text())
+    if isinstance(path, str):
+        path = Path(path)
+    return yaml.safe_load(path.read_text())

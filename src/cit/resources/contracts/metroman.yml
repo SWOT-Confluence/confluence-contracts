@@ -91,4 +91,57 @@ module:
         required: true
         attrs:
           long_name: q_u
-  consumes: []
+  consumes:
+  - module: combine_data
+    filepath: input/metrosets.json
+    variables: []
+  - module: input
+    filepath: input/swot/{reach_id}_SWOT.nc
+    variables:
+    - node/d_x_area
+    - node/dark_frac
+    - node/ice_clim_f
+    - node/node_id
+    - node/node_q
+    - node/node_q_b
+    - node/reach_id
+    - node/slope2
+    - node/time
+    - node/width
+    - node/wse
+    - reach/d_x_area
+    - reach/dark_frac
+    - reach/ice_clim_f
+    - reach/n_good_nod
+    - reach/obs_frac_n
+    - reach/partial_f
+    - reach/reach_id
+    - reach/reach_q
+    - reach/reach_q_b
+    - reach/slope2
+    - reach/time
+    - reach/time_str
+    - reach/width
+    - reach/wse
+    - reach/xovr_cal_q
+  - module: priors
+    filepath: input/sos/{continent}_sword_v{number}_SOS_priors.nc
+    variables:
+    - model/area_estimate_flag
+    - model/bad_prior_source
+    - model/bad_priors
+    - model/comid
+    - model/flow_duration_q
+    - model/max_q
+    - model/mean_q
+    - model/min_q
+    - model/monthly_q
+    - model/num_months
+    - model/overwritten_indexes
+    - model/overwritten_source
+    - model/probability
+    - model/two_year_return_q
+    - nodes/reach_id
+    - reaches/reach_id
+    - reaches/x
+    - reaches/y

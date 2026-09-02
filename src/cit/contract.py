@@ -104,6 +104,7 @@ class Produces(_Base):
 class Consumes(_Base):
     """One input a module reads (feeds the consumes/produces cross-check)."""
 
+    module: str | None = None
     filepath: str
     variables: list[str] = Field(default_factory=list)
 
