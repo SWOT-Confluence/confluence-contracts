@@ -100,10 +100,9 @@ class ContractParser(Parser):
 class RulesParser(Parser, ABC):
     """Abstract base for one kind of rules artifact, registered by its rule name.
 
-    A subclass declares three pieces of class-level data and nothing else is wired by hand:
-    :attr:`rule_name` (the registry key, equal to the module name it governs),
-    :attr:`artifact` (the bundled YAML filename it generates), and :attr:`fixed_tabs` (the
-    workbook tabs it always reads, as opposed to the per-module group tabs a caller selects).
+    A subclass declares two pieces of class-level data and nothing else is wired by hand:
+    :attr:`rule_name` (the registry key, equal to the module name it governs) and
+    :attr:`artifact` (the bundled YAML filename it generates).
 
     The artifact filename is class data rather than a convention derived from ``rule_name``:
     the one artifact shipped today is ``sos_results_rules.yml`` under ``rule_name`` ``output``,
@@ -116,12 +115,10 @@ class RulesParser(Parser, ABC):
     Attributes:
         rule_name: The registry key -- the module name whose rules this parser generates.
         artifact: The bundled YAML filename under ``cit/resources/rules/``.
-        fixed_tabs: Workbook tabs read on every run, independent of the selected groups.
     """
 
     rule_name: ClassVar[str] = ""
     artifact: ClassVar[str] = ""
-    fixed_tabs: ClassVar[tuple[str, ...]] = ()
     _registry: ClassVar[dict[str, type["RulesParser"]]] = {}
 
     def __init__(self, rule_file: Path) -> None:
@@ -226,7 +223,8 @@ class OutputRulesParser(RulesParser):
 
     rule_name = "output"
     artifact = "sos_results_rules.yml"
-    fixed_tabs = ("root", "global_attributes", "fill_values")
+
+    fixed_tabs: ClassVar[tuple[str, ...]] = ("root", "global_attributes", "fill_values")
 
     #: Non-group tabs that document the workbook rather than describe data.
     doc_tabs: ClassVar[tuple[str, ...]] = ("README",)
