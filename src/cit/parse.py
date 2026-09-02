@@ -17,7 +17,7 @@ source, and a :attr:`ParsePlan.both` view of where the two sets intersect.
 
 Planned (P1-10):
 
-- ``ContractParser.parse`` -- walk the result files via :mod:`cit.netcdf`, emit each variable's
+- ``ContractParser.parse`` -- walk the result file via :mod:`cit.netcdf`, emit each variable's
   ``dtype`` / ``dimensions`` / ``required`` and the ``filepath`` template, pre-fill the
   ``version`` / ``source`` scaffold, and -- when a rules artifact is supplied -- merge the SoS
   ``attrs`` per variable so the draft is complete enough to pass both validators.
@@ -29,7 +29,6 @@ Planned (P1-10):
 
 import inspect
 from abc import ABC, abstractmethod
-from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
@@ -72,20 +71,25 @@ class Parser(ABC):
 
 
 class ContractParser(Parser):
-    """Draft a contract from one module's produced result files."""
+    """Draft a contract from one exemplar result file the module produced.
 
-    def __init__(self, module: str, module_files: Sequence[Path]) -> None:
-        """Bind this parser to the module and its result files.
+    Exactly one file, deliberately: the caller picks the exemplar and owns finalizing it, so a
+    contract is never merged from several of a module's result files -- CIT does not make those
+    merge decisions on the caller's behalf.
+    """
+
+    def __init__(self, module: str, module_file: Path) -> None:
+        """Bind this parser to the module and its result file.
 
         Args:
             module: The module name -- the identity the drafted contract is committed under.
-            module_files: The produced result files to draft a contract from, in the order given.
+            module_file: The produced result file to draft a contract from.
         """
         self.module = module
-        self.module_files = tuple(module_files)
+        self.module_file = Path(module_file)
 
     def parse(self) -> BaseModel:
-        """Read the result files and return the draft contract describing them.
+        """Read the result file and return the draft contract describing it.
 
         Returns:
             The drafted :class:`~cit.contract.Contract` (P1-10).

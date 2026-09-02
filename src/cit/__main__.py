@@ -137,8 +137,8 @@ def _parse(args: argparse.Namespace) -> int:
             "contract from; repeat it for each file)."
         )
 
-    # Names are guaranteed unique by _SingleAction; map each to a single-element list.
-    module_files: dict[str, list[str]] = {name: [path] for name, path in args.module_file}
+    # _SingleAction's duplicate rejection is load-bearing: a repeated name would clobber here.
+    module_files: dict[str, str] = dict(args.module_file)
 
     # args.rule_file is [(name, path), ...] or None; convert to {name: path} or None.
     rule_files: dict[str, str] | None = dict(args.rule_file) if args.rule_file else None

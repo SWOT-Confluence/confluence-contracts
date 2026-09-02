@@ -26,7 +26,7 @@ something the user typed, never inferred from a result filename.
 
 import functools
 import logging
-from collections.abc import Iterable, Iterator, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping
 from pathlib import Path
 
 from cit.contract import Contract, Produces
@@ -177,7 +177,7 @@ class Orchestrate:
 
     def parse(
         self,
-        module_files: Mapping[str, Sequence[str]],
+        module_files: Mapping[str, str],
         rule_files: Mapping[str, str] | None = None,
         *,
         strict: bool = False,
@@ -189,8 +189,9 @@ class Orchestrate:
         invoked; drafting each contract and rules artifact happens in the next step (P1-10).
 
         Args:
-            module_files: Produced result files grouped by module name -- each key is a module
-                name and each value is the sequence of file paths for that module's contract parser.
+            module_files: Produced result files keyed by module name -- each key is a module name
+                and each value is the single exemplar result file path for that module's contract
+                parser.
             rule_files: Rules sources keyed by the registered rules-parser name (e.g.
                 ``"output"``); ``None`` drafts contracts with no SoS metadata merged in.
             strict: When True, parsing with no rules source is an error rather than a warning.
@@ -222,8 +223,8 @@ class Orchestrate:
             )
 
         contracts: dict[str, ContractParser] = {
-            module: ContractParser(module, [Path(p) for p in paths])
-            for module, paths in module_files.items()
+            module: ContractParser(module, Path(path))
+            for module, path in module_files.items()
         }
 
         plan = ParsePlan(contracts=contracts, rules=rules)
