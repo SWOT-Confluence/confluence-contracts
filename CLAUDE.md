@@ -30,7 +30,7 @@ src/cit/                       # the `cit` import package (flat: one module per 
   data.py                      # I/O layer (the only component that touches disk)
   validation.py                # structural validator + report-only health checks + cross-check
   rules.py                     # SoS metadata-rules model + validator
-  parser.py                    # ContractParser (result -> draft contract; inverse of validate)
+  parse.py                     # ContractParser (result -> draft contract; inverse of validate)
   report.py                    # Finding + Report (statuses, banner, exit policy)
   resources/                   # all bundled package data (loaded via importlib.resources)
     contracts/*.yml            # per-module contracts — the interface source of truth

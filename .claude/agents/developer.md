@@ -27,7 +27,7 @@ Key locations:
   - `data.py` — I/O layer (the only component that touches disk)
   - `validation.py` — structural validator + report-only health checks + cross-check
   - `rules.py` — SoS metadata-rules validator
-  - `parser.py` — `ContractParser` (result → draft contract)
+  - `parse.py` — `ContractParser` (result → draft contract)
   - `report.py` — `Finding` + `Report`
   - `__main__.py` — the `cit` CLI (`validate` | `parse`)
 - `src/cit/resources/contracts/*.yml` — per-module contracts (package data, the interface source of truth)
