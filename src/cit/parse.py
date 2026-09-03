@@ -27,6 +27,7 @@ Planned (P1-10):
   an install that never sees the workbook.
 """
 
+import functools
 import inspect
 import logging
 from abc import ABC, abstractmethod
@@ -49,6 +50,7 @@ from cit.contract import (
 )
 from cit.data import load_yaml, match_result_filename
 from cit.result import NetcdfResult
+from cit.rules import MetadataRule, MetadataRules
 
 logger = logging.getLogger(__name__)   # "cit.parse" — child of "cit"
 _REPO_CONFIG = ConfigDict(extra="forbid", frozen=True, str_strip_whitespace=True)
@@ -400,37 +402,31 @@ class OutputRulesParser(RulesParser):
 
     rule_name = "output"
     artifact = "sos_results_rules.yml"
+    filepath = "output/sos/{continent_id}_sword_v{number}_SOS_results.nc"
+    output_dir = Path(__file__).resolve().parent / "resources" / "contracts"
 
+    #: Fixed tabs that contain data on root-level
     fixed_tabs: ClassVar[tuple[str, ...]] = ("root", "global_attributes", "fill_values")
-
     #: Non-group tabs that document the workbook rather than describe data.
-    doc_tabs: ClassVar[tuple[str, ...]] = ("README",)
+    doc_tabs: ClassVar[tuple[str, ...]] = ("README", "_TEMPLATE")
+
+    @functools.cached_property
+    def _tabs(self) -> dict[str, list[tuple]]:
+        """Every tab's rows, read once (openpyxl is dev-only, so it is imported here)."""
+        import openpyxl
+        workbook = openpyxl.load_workbook(self.rule_file, read_only=True, data_only=True)
+        try:
+            return {name: list(workbook[name].iter_rows(values_only=True)) for name in workbook.sheetnames}
+        finally:
+            workbook.close()
 
     def groups(self) -> list[str]:
         """Every module-group tab in the workbook, sorted.
 
-        openpyxl is a dev-only dependency, so it is imported here rather than at module scope:
-        ``cit validate`` must keep working in an install that never sees the workbook.
-
         Returns:
-            The workbook's tab names, minus :attr:`fixed_tabs`, minus the documentation tabs,
-            minus any ``_``-prefixed tab (the workbook's own convention for a template).
-
-        Raises:
-            ValueError: If openpyxl is not installed, which is what reading a workbook needs.
+            The workbook's tab names, minus :attr:`fixed_tabs` and :attr:`doc_tabs`.
         """
-        try:
-            import openpyxl
-        except ImportError as error:  # pragma: no cover -- openpyxl ships in the test group
-            raise ValueError(
-                "reading a --rule-file workbook needs openpyxl, which is not installed"
-            ) from error
-
-        workbook = openpyxl.load_workbook(self.rule_file, read_only=True)
-        skip = {*self.fixed_tabs, *self.doc_tabs}
-        return sorted(
-            tab for tab in workbook.sheetnames if tab not in skip and not tab.startswith("_")
-        )
+        return sorted(set(self._tabs) - {*self.fixed_tabs, *self.doc_tabs})
 
     def parse(self) -> BaseModel:
         """Read the workbook's fixed tabs and module groups into a rules model.
@@ -438,8 +434,84 @@ class OutputRulesParser(RulesParser):
         Returns:
             The parsed :class:`~cit.rules.MetadataRules` (P1-10).
         """
-        ...
+        global_attributes = [
+            record["Attribute Name"]
+            for record in self._records("global_attributes", "Attribute Name")
+        ]
 
+        variable_attributes = self._variable_attributes()
+
+        fill_values = {
+            record["Variable Type"]: record["Fill Value"]
+            for record in self._records("fill_values", "Fill Value")
+        }
+
+        rules = MetadataRules(
+            module_name=self.rule_name,
+            filepath=self.filepath,
+            global_attributes=global_attributes,
+            variable_attributes=variable_attributes,
+            fill_values=fill_values
+        )
+
+        # Save the contract to the repo
+        output_file = self.output_dir / self.artifact
+        self.write(data=rules, output=output_file)
+
+    def _variable_attributes(self) -> dict[str, dict[str, MetadataRule]]:
+        """Every group's expected attributes, keyed by group then variable.
+
+        Returns:
+            One entry per module tab, each holding that group's rules.
+        """
+        return {group: self._variable_rules(group) for group in self.groups()}
+
+    def _variable_rules(self, tab: str) -> dict[str, MetadataRule]:
+        """Return one group's expected attributes, keyed by variable name.
+
+        A row's ``nested`` cell qualifies its variable (``momma/q`` inside ``moi``), matching the
+        name below the group that :class:`cit.validation.RulesValidator` compares against. Blank
+        cells are dropped rather than passed as ``None``, so a rule's ``model_fields_set`` names
+        only the attributes the workbook actually declares.
+
+        Args:
+            tab: The module tab to read, whose name is the group name.
+
+        Returns:
+            A :class:`~cit.rules.MetadataRule` per variable, keyed as declared.
+        """
+        rules: dict[str, MetadataRule] = {}
+        for record in self._records(tab, "variable"):
+            nested = record.get("nested")
+            name = f"{nested}/{record['variable']}" if nested else record["variable"]
+            rules[name] = MetadataRule(
+                **{k: v for k, v in record.items() if k in MetadataRule.model_fields and v is not None}
+            )
+        return rules
+
+    def _records(self, tab: str, column: str) -> list[dict]:
+        """Return a tab's data rows as dicts keyed by its header row.
+
+        The header row is found by searching for ``column`` rather than by position, since the
+        key/value block above it is four rows on ``root`` and five on a module tab. Columns whose
+        header cell holds no name are dropped, so a caller works in the workbook's own column
+        names -- which, for a variable row, are :class:`~cit.rules.MetadataRule`'s field names.
+
+        Args:
+            tab: The tab to read.
+            column: A column name that must appear in that tab's header row.
+
+        Returns:
+            One dict per data row, keyed by column name.
+        """
+        rows = self._tabs[tab]
+        start = next(i for i, row in enumerate(rows) if column in row)
+        header = [cell if isinstance(cell, str) and cell.strip() else None for cell in rows[start]]
+        return [
+            { name: value for name, value in zip(header, row) if name }
+            for row in rows[start + 1:]
+            if any(cell is not None for cell in row)
+        ]
 
 @dataclass(frozen=True)
 class ParsePlan:

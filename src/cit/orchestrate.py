@@ -246,8 +246,8 @@ class Orchestrate:
         for contract in plan.contracts.values():
             contract.parse()
 
-        # for rule in plan.rules.values():
-        #     rule.parse()
+        for rule in plan.rules.values():
+            rule.parse()
 
         # # Log the three-line summary so a library caller and the CLI see the same record.
         # logger.info("contracts: %s", ", ".join(f"'{m}'" for m in sorted(contracts)) or "none")
